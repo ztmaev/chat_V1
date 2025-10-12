@@ -859,7 +859,7 @@ def status_page():
     
     return render_template('status.html',
         status="Online",
-        version="2.5.0",
+        version="1.0.0",
         uptime=uptime_str,
         database_status=database_status,
         firebase_status=firebase_status
