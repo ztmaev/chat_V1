@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import time
 from werkzeug.utils import secure_filename
 from db import get_db
 import json
@@ -31,9 +32,14 @@ except ImportError:
 app = Flask(__name__)
 CORS(app)
 
+# Track start time for uptime
+START_TIME = time.time()
+
 # Initialize Firebase Admin SDK
+FIREBASE_INITIALIZED = False
 try:
     initialize_firebase()
+    FIREBASE_INITIALIZED = True
 except Exception as e:
     print(f"⚠️  Warning: Firebase initialization failed: {e}")
     print("   API will continue but authentication will not work")
@@ -816,20 +822,72 @@ def serve_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # ============================================================================
-# HEALTH CHECK (Public)
+# HEALTH CHECK & STATUS PAGE (Public)
 # ============================================================================
+
+@app.route('/', methods=['GET'])
+def status_page():
+    """ Beautiful status page (public)"""
+    # Calculate uptime
+    uptime_seconds = int(time.time() - START_TIME)
+    uptime_delta = timedelta(seconds=uptime_seconds)
+    
+    # Format uptime
+    days = uptime_delta.days
+    hours, remainder = divmod(uptime_delta.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    if days > 0:
+        uptime_str = f"{days}d {hours}h {minutes}m"
+    elif hours > 0:
+        uptime_str = f"{hours}h {minutes}m"
+    else:
+        uptime_str = f"{minutes}m {seconds}s"
+    
+    # Check database status
+    try:
+        stats = db.get_stats()
+        database_status = {"text": "Connected", "icon": "fa-check-circle", "color": "#3fb950"}
+    except:
+        database_status = {"text": "Error", "icon": "fa-times-circle", "color": "#f85149"}
+    
+    # Check Firebase status
+    if FIREBASE_INITIALIZED:
+        firebase_status = {"text": "Active", "icon": "fa-check-circle", "color": "#3fb950"}
+    else:
+        firebase_status = {"text": "Not Configured", "icon": "fa-exclamation-triangle", "color": "#d29922"}
+    
+    return render_template('status.html',
+        status="Online",
+        version="2.5.0",
+        uptime=uptime_str,
+        database_status=database_status,
+        firebase_status=firebase_status
+    )
+
+@app.route('/stats', methods=['GET'])
+def stats_endpoint():
+    """Stats endpoint (public)"""
+    stats = db.get_stats()
+    
+    return jsonify({
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat(),
+        'stats': stats
+    })
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint (public)"""
-    stats = db.get_stats()
+    """Health check endpoint for Docker (public)"""
     return jsonify({
-        'status': 'healthy',
-        'service': 'messaging-api',
-        'database': 'connected',
-        'authentication': 'firebase-admin',
-        'stats': stats
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat()
     })
+
+@app.route('/docs', methods=['GET'])
+def docs():
+    """API documentation endpoint (public)"""
+    return render_template('docs.html')
 
 @app.route('/auth/test', methods=['GET'])
 @require_auth

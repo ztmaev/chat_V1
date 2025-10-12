@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Database (will be mounted as volume)
+*.db
+*.db-journal
+
+# Uploads (will be mounted as volume)
+uploads/
+
+# Environment files
+.env
+.chat_env
+
+# Documentation
+*.md
+docs/
+
+# Test files
+test_*.py
+*_test.py
+
+# Demo UI
+chat_api_demo_ui/
+
+# Migration scripts (not needed in production)
+migrate_*.py
+setup_demo_data.py
+
+# Backup files
+*.backup*
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db

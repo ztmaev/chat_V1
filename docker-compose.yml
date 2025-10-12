@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  chat-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: influencer-chat-api
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      # Flask Configuration
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-False}
+      - API_PORT=5001
+      - API_HOST=0.0.0.0
+      
+      # File Upload Configuration
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-16777216}
+      - UPLOAD_FOLDER=uploads
+      
+      # Firebase Configuration (use JSON string for production)
+      - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      
+      # CORS Configuration
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    volumes:
+      # Persist database
+      - ./messaging.db:/app/messaging.db
+      
+      # Persist uploaded files
+      - ./uploads:/app/uploads
+      
+      # Mount service account key if using file-based auth (development)
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
+    networks:
+      - influencer-network
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:5001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  influencer-network:
+    driver: bridge

@@ -4,6 +4,22 @@
 
 ## 🚀 Quick Start
 
+### Option 1: Docker (Recommended)
+
+```bash
+# 1. Add your Firebase service account key
+# Download from Firebase Console → Project Settings → Service Accounts
+# Save as: serviceAccountKey.json
+
+# 2. Start with Docker
+./docker-start.sh start
+
+# View logs
+./docker-start.sh logs
+```
+
+### Option 2: Local Python
+
 ```bash
 # 1. Run setup script
 ./setup_firebase.sh
@@ -24,6 +40,7 @@ The API will be available at `http://localhost:5001`
 - [Overview](#overview)
 - [Features](#features)
 - [Quick Setup](#quick-setup)
+- [Docker Setup](#docker-setup)
 - [Authentication](#authentication)
 - [API Endpoints](#api-endpoints)
 - [Database Structure](#database-structure)
@@ -118,6 +135,98 @@ pip install -r requirements.txt
 ```bash
 # Populate with demo data
 python3 setup_demo_data.py
+```
+
+## 🐳 Docker Setup
+
+The Chat API can be easily deployed using Docker and Docker Compose.
+
+### Quick Docker Start
+
+```bash
+# Start the API with Docker
+./docker-start.sh start
+
+# View logs
+./docker-start.sh logs
+
+# Stop the API
+./docker-start.sh stop
+```
+
+### Docker Commands
+
+```bash
+# Start in production mode
+./docker-start.sh start prod
+
+# Rebuild after code changes
+./docker-start.sh rebuild
+
+# Backup database
+./docker-start.sh backup
+
+# Initialize with demo data
+./docker-start.sh init
+
+# View status
+./docker-start.sh status
+
+# Access container shell
+./docker-start.sh shell
+```
+
+### Manual Docker Compose
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f chat-api
+
+# Stop services
+docker-compose down
+
+# Production deployment
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+### Docker Features
+
+- ✅ Automated container setup with health checks
+- ✅ Persistent database and uploads via volumes
+- ✅ Production-ready configuration
+- ✅ Resource limits and logging
+- ✅ Easy backup and restore
+- ✅ Isolated network for security
+
+### Using Make Commands
+
+```bash
+make start      # Start API
+make prod       # Start in production mode
+make stop       # Stop API
+make logs       # View logs
+make test       # Run Docker tests
+make backup     # Backup database
+make help       # Show all commands
+```
+
+### Troubleshooting Docker
+
+```bash
+# Container won't start
+./docker-start.sh logs
+
+# Port 5001 in use
+sudo lsof -i :5001
+
+# Rebuild container
+./docker-start.sh rebuild
+
+# Run diagnostic tests
+./test-docker-setup.sh
 ```
 
 ## 🔐 Authentication
