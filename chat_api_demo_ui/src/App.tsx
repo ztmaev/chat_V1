@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth } from './firebase';
 import { signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
-import { getThreads, testAuth } from './api';
+import { getThreads, getConversations, getMessages, sendMessage, testAuth } from './api';
 import ThreadManagement from './pages/ThreadManagement';
 import './App.css';
 

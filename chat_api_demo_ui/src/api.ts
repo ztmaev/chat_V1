@@ -1,6 +1,6 @@
 import { auth } from './firebase';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://143.110.171.72:5001';
 
 async function getAuthHeaders(): Promise<HeadersInit> {
   const user = auth.currentUser;
