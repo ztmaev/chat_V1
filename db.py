@@ -318,6 +318,27 @@ class MessagingDatabase:
         finally:
             conn.close()
     
+    def get_threads_for_user(self, user_id: str) -> List[Dict]:
+        """Get threads where user is creator OR participant in any conversation"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute('''
+                SELECT DISTINCT t.*,
+                       COUNT(DISTINCT c.id) as conversation_count,
+                       SUM(c.unread_count) as total_unread
+                FROM threads t
+                LEFT JOIN conversations c ON t.id = c.thread_id
+                WHERE t.status = 'active'
+                  AND (t.created_by = ? 
+                       OR c.participant1_id = ? 
+                       OR c.participant2_id = ?)
+                GROUP BY t.id
+                ORDER BY t.updated_at DESC
+            ''', (user_id, user_id, user_id))
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+    
     def get_thread_by_id(self, thread_id: str) -> Optional[Dict]:
         """Get thread by ID"""
         conn = self.get_connection()
@@ -381,6 +402,23 @@ class MessagingDatabase:
         conn = self.get_connection()
         try:
             cursor = conn.execute('SELECT 1 FROM threads WHERE id = ?', (thread_id,))
+            return cursor.fetchone() is not None
+        finally:
+            conn.close()
+    
+    def user_has_thread_access(self, thread_id: str, user_id: str) -> bool:
+        """Check if user has access to thread (creator or participant in any conversation)"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute('''
+                SELECT 1 FROM threads t
+                LEFT JOIN conversations c ON t.id = c.thread_id
+                WHERE t.id = ?
+                  AND (t.created_by = ? 
+                       OR c.participant1_id = ? 
+                       OR c.participant2_id = ?)
+                LIMIT 1
+            ''', (thread_id, user_id, user_id, user_id))
             return cursor.fetchone() is not None
         finally:
             conn.close()

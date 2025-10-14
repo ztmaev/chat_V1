@@ -356,9 +356,8 @@ def handle_threads():
         else:
             print(f"⏭️  Skipping thread sync - Role: {user_role}, Email: {user_email}")
         
-        # Filter threads to only show threads created by the authenticated user
-        all_threads = db.get_threads()
-        user_threads = [t for t in all_threads if t.get('created_by') == user_id]
+        # Get threads where user is creator OR participant in any conversation
+        user_threads = db.get_threads_for_user(user_id)
         
         print(f"📋 Returning {len(user_threads)} threads for {user_email}")
         
@@ -395,11 +394,11 @@ def get_thread(thread_id):
     if not db.thread_exists(thread_id):
         return jsonify({'error': 'Thread not found'}), 404
     
-    thread = db.get_thread_by_id(thread_id)
+    # Verify user has access to thread (creator or participant)
+    if not db.user_has_thread_access(thread_id, user_id):
+        return jsonify({'error': 'Access denied. You do not have access to this thread'}), 403
     
-    # Verify user is the thread owner
-    if thread.get('created_by') != user_id:
-        return jsonify({'error': 'Access denied. You are not the owner of this thread'}), 403
+    thread = db.get_thread_by_id(thread_id)
     
     # Only return conversations where the user is a participant
     conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
@@ -428,12 +427,13 @@ def handle_thread_conversations(thread_id):
     user_id = user['uid']
     ensure_user_exists(user)
     
-    # Verify user is the thread owner
     thread = db.get_thread_by_id(thread_id)
-    if thread.get('created_by') != user_id:
-        return jsonify({'error': 'Access denied. You are not the owner of this thread'}), 403
     
     if request.method == 'GET':
+        # Verify user has access to thread (creator or participant)
+        if not db.user_has_thread_access(thread_id, user_id):
+            return jsonify({'error': 'Access denied. You do not have access to this thread'}), 403
+        
         # Only return conversations where the user is a participant
         conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
         return jsonify({
@@ -443,11 +443,15 @@ def handle_thread_conversations(thread_id):
         })
     
     if request.method == 'POST':
+        # For POST, verify user is the thread owner (only owner can create conversations)
+        if thread.get('created_by') != user_id:
+            return jsonify({'error': 'Access denied. Only the thread owner can create conversations'}), 403
+        
         data = request.get_json()
         if not data:
             data = {}  # Allow empty body for creating conversation with only owner
         
-        # Thread owner is the authenticated user (already verified above)
+        # Thread owner is the authenticated user
         thread_owner_id = user_id
         
         # Determine the other participant (optional)
