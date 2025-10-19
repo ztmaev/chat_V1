@@ -335,7 +335,16 @@ def determine_message_type(message: dict) -> str:
     
     # Get attachments
     attachments = message.get('attachments', [])
-    if not attachments:
+    
+    # Handle case where attachments might be a JSON string (shouldn't happen after db.py fix)
+    if isinstance(attachments, str):
+        try:
+            import json
+            attachments = json.loads(attachments)
+        except (json.JSONDecodeError, TypeError):
+            attachments = []
+    
+    if not attachments or not isinstance(attachments, list):
         # Legacy format - check for filename field
         if message.get('filename'):
             file_type = get_file_type(message.get('filename', ''))
@@ -343,7 +352,12 @@ def determine_message_type(message: dict) -> str:
         return 'text'
     
     # Determine primary attachment type (use first attachment's type)
-    primary_type = attachments[0].get('type', 'file')
+    first_attachment = attachments[0]
+    if isinstance(first_attachment, dict):
+        primary_type = first_attachment.get('type', 'file')
+    else:
+        # Fallback if attachment is not a dict
+        primary_type = 'file'
     
     # Return combined type if text is present
     if has_text:

@@ -593,6 +593,7 @@ class MessagingDatabase:
     # Message operations
     def get_messages(self, conversation_id: str) -> List[Dict]:
         """Get all messages for a conversation"""
+        import json
         conn = self.get_connection()
         try:
             cursor = conn.execute('''
@@ -606,6 +607,14 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                
+                # Parse attachments JSON if present
+                if message.get('attachments'):
+                    try:
+                        message['attachments'] = json.loads(message['attachments'])
+                    except (json.JSONDecodeError, TypeError):
+                        message['attachments'] = []
+                
                 messages.append(message)
             
             return messages
@@ -614,6 +623,7 @@ class MessagingDatabase:
     
     def get_messages_by_thread(self, thread_id: str) -> List[Dict]:
         """Get all messages in a thread"""
+        import json
         conn = self.get_connection()
         try:
             cursor = conn.execute('''
@@ -627,6 +637,14 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                
+                # Parse attachments JSON if present
+                if message.get('attachments'):
+                    try:
+                        message['attachments'] = json.loads(message['attachments'])
+                    except (json.JSONDecodeError, TypeError):
+                        message['attachments'] = []
+                
                 messages.append(message)
             
             return messages
@@ -635,6 +653,7 @@ class MessagingDatabase:
     
     def get_last_message(self, conversation_id: str) -> Optional[Dict]:
         """Get the last message in a conversation"""
+        import json
         conn = self.get_connection()
         try:
             cursor = conn.execute('''
@@ -649,6 +668,14 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                
+                # Parse attachments JSON if present
+                if message.get('attachments'):
+                    try:
+                        message['attachments'] = json.loads(message['attachments'])
+                    except (json.JSONDecodeError, TypeError):
+                        message['attachments'] = []
+                
                 return message
             return None
         finally:
