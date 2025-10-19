@@ -1,0 +1,87 @@
+<div class="container">
+    <div class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <div class="api-icon">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <div>
+                    <h1>Hyptrb Chat API</h1>
+                    <p>Secure, thread-based messaging with Firebase authentication</p>
+                </div>
+            </div>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>{{ status }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="section">
+            <div class="section-title">
+                <i class="fas fa-info-circle"></i>
+                System Information
+            </div>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <i class="fas fa-tag"></i>
+                        </div>
+                        <div class="card-title">Version</div>
+                    </div>
+                    <div class="card-value">{{ version }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="card-title">Uptime</div>
+                    </div>
+                    <div class="card-value">{{ uptime }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="card-title">Database</div>
+                    </div>
+                    <div class="card-value">
+                        <i class="fas {{ database_status.icon }}" style="color: {{ database_status.color }}; margin-right: 8px;"></i>
+                        {{ database_status.text }}
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div class="card-title">Firebase Auth</div>
+                    </div>
+                    <div class="card-value">
+                        <i class="fas {{ firebase_status.icon }}" style="color: {{ firebase_status.color }}; margin-right: 8px;"></i>
+                        {{ firebase_status.text }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">
+                <i class="fas fa-chart-bar"></i>
+                Database Statistics
+            </div>
+            <div id="stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                <!-- Stats will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Stats are loaded and polled by the main dashboard.html script
+    // This ensures polling continues even when navigating between pages
+</script>

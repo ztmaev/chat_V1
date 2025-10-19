@@ -65,6 +65,8 @@ This is a production-ready messaging API for the InfluencerConnect platform. It 
 - ✅ Authorization checks (users can only delete own messages)
 - ✅ **Hyptrb API integration** - Auto-fetch user roles and profiles
 - ✅ **Thread ownership** - Only thread owners can access and manage threads
+- ✅ **Admin authentication** - Secure login for management dashboard
+- ✅ **Session-based admin access** - Protected status and statistics pages
 
 ### Messaging
 - ✅ **Automatic thread creation** - Threads auto-created from Hyptrb campaigns
@@ -136,6 +138,33 @@ pip install -r requirements.txt
 # Populate with demo data
 python3 setup_demo_data.py
 ```
+
+### Admin Dashboard Setup
+
+The API includes a secure admin dashboard for monitoring and management.
+
+1. **Configure Admin Credentials:**
+   ```bash
+   # Copy example environment file
+   cp .env.example .env
+   
+   # Edit .env and set:
+   SECRET_KEY=your-random-secret-key-here
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=your-secure-password
+   ```
+
+2. **Access Dashboard:**
+   - Navigate to `http://localhost:5001/`
+   - Login with your admin credentials
+   - Access dashboard, statistics, and API documentation
+
+3. **Admin Features:**
+   - 🔐 Secure session-based authentication
+   - 📊 Real-time database statistics
+   - 📈 System status monitoring
+   - 📚 Complete API documentation
+   - 🚪 Secure logout functionality
 
 ## 🐳 Docker Setup
 
@@ -316,6 +345,23 @@ python3 test_hyptrb_integration.py
 
 ## 📡 API Endpoints
 
+### Admin Dashboard (Session-based Auth)
+- `GET /` - Redirects to admin login
+- `GET /admin/login` - Admin login page
+- `POST /admin/login` - Submit login credentials
+- `GET /admin/logout` - Logout and clear session
+- `GET /admin/dashboard` - Main dashboard with system status (protected)
+- `GET /admin/stats` - Database statistics page (protected)
+- `GET /admin/docs` - API documentation page (protected)
+- `GET /admin/api/stats` - JSON stats endpoint (protected)
+
+**Admin Authentication:**
+- Session-based authentication using Flask sessions
+- Credentials stored in environment variables (`ADMIN_USERNAME`, `ADMIN_PASSWORD`)
+- Persistent sessions with secure secret key
+- Automatic redirect to login for unauthenticated access
+- Beautiful modern UI with dark theme
+
 ### Authentication Test
 - `GET /auth/test` - Verify authentication (requires token)
 - `GET /health` - Health check (public)
@@ -367,6 +413,98 @@ python3 test_hyptrb_integration.py
 - Joining user becomes `participant2`
 - Cannot join your own conversation
 
+### Admin Features (Admin Only)
+
+#### POST /messages/campaigns/{campaign_id}/join
+**Join a campaign thread as an admin**
+
+- ⚠️ **Requires admin role** (`role='admin'` in database)
+- **Purpose**: Allows admins to join any campaign thread for support/monitoring
+- **Request Body**: None (campaign ID in URL path)
+- **Authentication**: Firebase token in Authorization header
+
+**How it works:**
+- Finds the thread associated with the campaign_id
+- Creates a conversation between admin and campaign owner
+- Conversation named: "{Campaign Name} - Admin Support"
+- Returns thread and conversation details for immediate messaging
+
+**Security:**
+- Only users with `role='admin'` can access
+- Admins cannot join their own campaigns
+- Validates campaign thread exists
+
+**Response (200 OK):**
+```json
+{
+  "message": "Successfully joined campaign",
+  "campaign_id": "68ba588b8500561576b8f3fd",
+  "thread_id": "t12345abc",
+  "conversation": {
+    "id": "c67890def",
+    "name": "Campaign Name - Admin Support",
+    "participant1_id": "owner_uid",
+    "participant2_id": "admin_uid"
+  }
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - User is not an admin
+- `404 Not Found` - Campaign thread not found
+- `400 Bad Request` - Trying to join own campaign
+
+#### POST /messages/admin/chat/{user_firebase_uid}
+**Start a direct chat with any user as an admin**
+
+- ⚠️ **Requires admin role** (`role='admin'` in database)
+- **Purpose**: Start a direct support chat with any user by their Firebase UID
+- **Request Body**: None (user Firebase UID in URL path)
+- **Authentication**: Firebase token in Authorization header
+
+**How it works:**
+- Validates target user exists in database
+- Creates a dedicated admin support thread (campaign_id: `admin_support_{user_uid}`)
+- Creates conversation between admin and user
+- Thread named: "Admin Support - {User Name}"
+- Idempotent - returns existing chat if already started
+
+**Security:**
+- Only users with `role='admin'` can access
+- Admins cannot chat with themselves
+- Validates target user exists
+
+**Response (200 OK):**
+```json
+{
+  "message": "Admin chat started successfully",
+  "user_firebase_uid": "user123abc",
+  "thread_id": "t98765xyz",
+  "thread": {
+    "id": "t98765xyz",
+    "title": "Admin Support - John Doe",
+    "campaign_id": "admin_support_user123abc"
+  },
+  "conversation": {
+    "id": "c54321def",
+    "name": "Admin Support - John Doe",
+    "participant1_id": "admin_uid",
+    "participant2_id": "user123abc"
+  }
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - User is not an admin
+- `404 Not Found` - Target user not found
+- `400 Bad Request` - Trying to chat with yourself
+
+**Use Cases:**
+- Proactive support outreach
+- Issue resolution and troubleshooting
+- User onboarding assistance
+- Account management communication
+
 ### Messages
 - `GET /messages/threads/<thread_id>/conversations/<conversation_id>/<message_id>` - Get message
 - `DELETE /messages/threads/<thread_id>/conversations/<conversation_id>/<message_id>` - Delete message
@@ -408,6 +546,56 @@ curl -X POST \
 curl -X POST \
   -H "Authorization: Bearer <firebase-token>" \
   http://localhost:5001/messages/threads/thread_1/conversations/conv_123/join
+```
+
+### Example: Admin Join Campaign (Admin Only)
+
+```bash
+# Admin joins a campaign by campaign_id
+curl -X POST \
+  -H "Authorization: Bearer <admin-firebase-token>" \
+  http://localhost:5001/messages/campaigns/68ba588b8500561576b8f3fd/join
+
+# Response includes conversation details
+{
+  "message": "Successfully joined campaign",
+  "campaign_id": "68ba588b8500561576b8f3fd",
+  "thread_id": "t12345abc",
+  "conversation": {
+    "id": "c67890def",
+    "name": "Campaign Name - Admin Support",
+    "participant1_id": "owner_uid",
+    "participant2_id": "admin_uid",
+    ...
+  }
+}
+```
+
+### Example: Admin Start Direct Chat (Admin Only)
+
+```bash
+# Admin starts a direct chat with a user by Firebase UID
+curl -X POST \
+  -H "Authorization: Bearer <admin-firebase-token>" \
+  http://localhost:5001/messages/admin/chat/user123abc
+
+# Response includes thread and conversation details
+{
+  "message": "Admin chat started successfully",
+  "user_firebase_uid": "user123abc",
+  "thread_id": "t98765xyz",
+  "thread": {
+    "id": "t98765xyz",
+    "title": "Admin Support - John Doe",
+    "campaign_id": "admin_support_user123abc"
+  },
+  "conversation": {
+    "id": "c54321def",
+    "name": "Admin Support - John Doe",
+    "participant1_id": "admin_uid",
+    "participant2_id": "user123abc"
+  }
+}
 ```
 
 ### Example: Send Message

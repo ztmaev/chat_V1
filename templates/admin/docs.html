@@ -1,0 +1,437 @@
+<div style="line-height: 1.6; max-width: 1200px; margin: 0 auto;">
+    <h3 style="color: #f0f6fc; margin-bottom: 16px; font-size: 1.25em;">
+        <i class="fas fa-rocket"></i> Getting Started
+    </h3>
+    <p style="margin-bottom: 24px; color: #8b949e;">
+        The Hyptrb Chat API provides a secure, thread-based messaging system with Firebase authentication.
+        All endpoints require authentication unless marked as public.
+    </p>
+
+    <h3 style="color: #f0f6fc; margin-bottom: 16px; font-size: 1.25em; margin-top: 32px;">
+        <i class="fas fa-shield-alt"></i> Authentication
+    </h3>
+    <p style="margin-bottom: 12px; color: #8b949e;">
+        Include your Firebase ID token in the Authorization header:
+    </p>
+    <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 16px; overflow-x: auto; margin-bottom: 24px;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">Authorization: Bearer YOUR_FIREBASE_TOKEN</code></pre>
+
+    <h3 style="color: #f0f6fc; margin-bottom: 16px; font-size: 1.25em; margin-top: 32px;">
+        <i class="fas fa-network-wired"></i> Core Endpoints
+    </h3>
+    
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #1f6feb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">GET</span>
+            /stats
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Get database statistics (public)</p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "status": "ok",
+  "timestamp": "2025-10-12T16:59:00.123456",
+  "stats": {
+    "total_users": 3,
+    "total_threads": 17,
+    "total_conversations": 12,
+    "total_messages": 51,
+    "total_unread": 0
+  }
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #1f6feb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">GET</span>
+            /messages/threads
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">List all message threads (requires auth)</p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "threads": [
+    {
+      "id": "thread_123",
+      "name": "Campaign Discussion",
+      "type": "group",
+      "created_at": "2025-10-10T10:00:00",
+      "conversation_count": 5,
+      "unread_count": 2
+    }
+  ]
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #238636; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">POST</span>
+            /messages/threads
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Create a new message thread (requires auth)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Request:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "name": "New Campaign Thread",
+  "type": "group"
+}</code></pre>
+        <p style="color: #8b949e; font-size: 0.9em; margin-top: 8px; margin-bottom: 4px;"><strong>Response:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "message": "Thread created successfully",
+  "thread": {
+    "id": "thread_456",
+    "name": "New Campaign Thread",
+    "type": "group",
+    "created_at": "2025-10-12T17:00:00"
+  }
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #1f6feb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">GET</span>
+            /messages/threads/{thread_id}/conversations
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Get all conversations in a thread (requires auth)</p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "conversations": [
+    {
+      "id": "conv_789",
+      "thread_id": "thread_123",
+      "name": "Brand Partnership",
+      "last_message": "Sounds great!",
+      "last_message_time": "2025-10-12T16:30:00",
+      "unread_count": 1,
+      "participants": ["user_1", "user_2"]
+    }
+  ]
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #238636; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">POST</span>
+            /messages/threads/{thread_id}/conversations/{conversation_id}
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Send a message in a conversation (requires auth)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Request:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "content": "Hello, world!",
+  "type": "text"
+}</code></pre>
+        <p style="color: #8b949e; font-size: 0.9em; margin-top: 8px; margin-bottom: 4px;"><strong>Response:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "message": "Message sent successfully",
+  "data": {
+    "id": "msg_101",
+    "conversation_id": "conv_789",
+    "sender_id": "user_1",
+    "content": "Hello, world!",
+    "type": "text",
+    "timestamp": "2025-10-12T17:05:00",
+    "status": "sent"
+  }
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #238636; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">POST</span>
+            /uploads
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Upload files (requires auth)</p>
+        <p style="color: #8b949e; font-size: 0.9em;"><strong>Body:</strong> multipart/form-data with file(s)</p>
+        <p style="color: #8b949e; font-size: 0.9em;"><strong>Max Size:</strong> 16MB per file</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 8px;"><strong>Supported:</strong> Images, videos, PDFs, documents</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Response:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "message": "Message sent successfully",
+  "attachments_count": 1,
+  "data": {
+    "id": "msg_123",
+    "conversation_id": "conv_456",
+    "thread_id": "thread_789",
+    "sender_id": "user_1",
+    "sender_type": "client",
+    "sender_name": "John Doe",
+    "type": "file",
+    "content": "",
+    "text_content": "Check out this file!",
+    "timestamp": "2025-10-18T14:30:00Z",
+    "status": "delivered",
+    "has_attachment": true,
+    "attachments": [
+      {
+        "filename": "abc123_image.jpg",
+        "original_filename": "image.jpg",
+        "file_path": "uploads/abc123_image.jpg",
+        "file_size": 245678,
+        "type": "image",
+        "dimensions": {
+          "width": 1920,
+        "height": 1080
+      }
+    }
+  ]
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #238636; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">POST</span>
+            /messages/threads/{thread_id}/conversations
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Create a new conversation in a thread (requires auth)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Request:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "name": "New Conversation",
+  "participants": ["user_1", "user_2"]
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px; border-left: 3px solid #d29922; padding-left: 16px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #238636; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">POST</span>
+            /messages/campaigns/{campaign_id}/join
+            <span style="background: #d29922; color: #0d1117; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; margin-left: 8px;">ADMIN ONLY</span>
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Join a campaign thread as an admin (requires admin role)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 8px;">
+            This endpoint allows admins to join any campaign thread and create a conversation with the campaign owner.
+            Only users with role='admin' can use this endpoint.
+        </p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Request Body:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">// No request body required
+// Campaign ID is provided in the URL path</code></pre>
+        <p style="color: #8b949e; font-size: 0.9em; margin-top: 12px; margin-bottom: 4px;"><strong>Response (Success):</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "message": "Successfully joined campaign",
+  "campaign_id": "68ba588b8500561576b8f3fd",
+  "thread_id": "t12345abc",
+  "conversation": {
+    "id": "c67890def",
+    "thread_id": "t12345abc",
+    "name": "Campaign Name - Admin Support",
+    "participant1_id": "owner_uid",
+    "participant1_name": "Campaign Owner",
+    "participant2_id": "admin_uid",
+    "participant2_name": "Admin",
+    "created_at": "2025-10-18T14:30:00"
+  }
+}</code></pre>
+        <p style="color: #8b949e; font-size: 0.9em; margin-top: 8px; margin-bottom: 4px;"><strong>Error Responses:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">// 403 Forbidden - Not an admin
+{
+  "error": "Access denied. Only admins can join campaigns",
+  "user_role": "client"
+}
+
+// 404 Not Found - Campaign doesn't exist
+{
+  "error": "Campaign thread not found"
+}
+
+// 400 Bad Request - Trying to join own campaign
+{
+  "error": "You cannot join your own campaign"
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px; border-left: 3px solid #d29922; padding-left: 16px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #238636; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">POST</span>
+            /messages/admin/chat/{user_firebase_uid}
+            <span style="background: #d29922; color: #0d1117; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; margin-left: 8px;">ADMIN ONLY</span>
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Start a direct chat with any user as an admin (requires admin role)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 8px;">
+            This endpoint allows admins to start a direct support chat with any user by their Firebase UID.
+            Creates a dedicated admin support thread and conversation. Only users with role='admin' can use this endpoint.
+        </p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Request Body:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">// No request body required
+// User Firebase UID is provided in the URL path</code></pre>
+        <p style="color: #8b949e; font-size: 0.9em; margin-top: 12px; margin-bottom: 4px;"><strong>Response (Success):</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "message": "Admin chat started successfully",
+  "user_firebase_uid": "user123abc",
+  "thread_id": "t98765xyz",
+  "thread": {
+    "id": "t98765xyz",
+    "title": "Admin Support - John Doe",
+    "campaign_id": "admin_support_user123abc",
+    "created_by": "admin_uid"
+  },
+  "conversation": {
+    "id": "c54321def",
+    "name": "Admin Support - John Doe",
+    "participant1_id": "admin_uid",
+    "participant2_id": "user123abc",
+    "created_at": "2025-10-18T14:50:00"
+  }
+}</code></pre>
+        <p style="color: #8b949e; font-size: 0.9em; margin-top: 8px; margin-bottom: 4px;"><strong>Error Responses:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">// 403 Forbidden - Not an admin
+{
+  "error": "Access denied. Only admins can start direct chats",
+  "user_role": "client"
+}
+
+// 404 Not Found - User doesn't exist
+{
+  "error": "User not found"
+}
+
+// 400 Bad Request - Trying to chat with yourself
+{
+  "error": "You cannot start a chat with yourself"
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #1f6feb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">GET</span>
+            /messages/threads/{thread_id}/conversations/{conversation_id}
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Get messages in a conversation (requires auth)</p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "messages": [
+    {
+      "id": "msg_101",
+      "conversation_id": "conv_789",
+      "sender_id": "user_1",
+      "sender_name": "John Doe",
+      "content": "Hello!",
+      "type": "text",
+      "timestamp": "2025-10-12T17:00:00",
+      "status": "sent",
+      "has_attachment": false
+    }
+  ]
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #9e6a03; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">PUT</span>
+            /messages/threads/{thread_id}/conversations/{conversation_id}
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Update conversation details (requires auth)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Request:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "name": "Updated Conversation Name"
+}</code></pre>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h4 style="color: #58a6ff; margin-bottom: 8px; font-size: 1.1em;">
+            <span style="background: #da3633; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'Courier New', monospace; margin-right: 8px;">DELETE</span>
+            /messages/threads/{thread_id}/conversations/{conversation_id}/{message_id}
+        </h4>
+        <p style="color: #8b949e; margin-bottom: 8px;">Delete a message (soft delete, requires auth)</p>
+        <p style="color: #8b949e; font-size: 0.9em; margin-bottom: 4px;"><strong>Response:</strong></p>
+        <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; margin-top: 8px; font-size: 0.85em;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">{
+  "message": "Message deleted successfully"
+}</code></pre>
+    </div>
+
+    <h3 style="color: #f0f6fc; margin-bottom: 16px; font-size: 1.25em; margin-top: 32px;">
+        <i class="fas fa-code"></i> Example Request
+    </h3>
+    <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 16px; overflow-x: auto; margin-bottom: 24px;">
+<code style="color: #c9d1d9; font-family: 'Courier New', monospace;">curl -X POST http://143.110.171.72:5001/messages/threads/thread123/conversations/conv456 \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Hello, world!", "type": "text"}'</code></pre>
+</div>
+
+<style>
+    .code-block-wrapper {
+        position: relative;
+    }
+    
+    .copy-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: #238636;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: background 0.2s;
+    }
+    
+    .copy-btn:hover {
+        background: #2ea043;
+    }
+    
+    .copy-btn.copied {
+        background: #1f6feb;
+    }
+</style>
+
+<script>
+    function copyCode(button) {
+        const wrapper = button.parentElement;
+        const pre = wrapper.querySelector('pre');
+        const code = pre.querySelector('code');
+        const text = code.textContent;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            const originalHTML = button.innerHTML;
+            
+            button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            button.classList.add('copied');
+            
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.classList.remove('copied');
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+    
+    // Add copy buttons to all pre blocks when content is loaded
+    (function() {
+        const preBlocks = document.querySelectorAll('pre');
+        
+        preBlocks.forEach(pre => {
+            if (pre.parentElement.classList.contains('code-block-wrapper')) {
+                return;
+            }
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'code-block-wrapper';
+            wrapper.style.position = 'relative';
+            
+            const button = document.createElement('button');
+            button.onclick = function() { copyCode(this); };
+            button.className = 'copy-btn';
+            button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+            
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(pre);
+            wrapper.appendChild(button);
+        });
+    })();
+</script>

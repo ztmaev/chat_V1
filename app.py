@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for
 from flask_cors import CORS
 from datetime import datetime, timedelta
 import os
@@ -15,6 +15,7 @@ from hyptrb_api import (
     fetch_influencer_collaborations,
     HyptrbAPIError
 )
+from admin_blueprint import admin_blueprint
 
 # Try to import PIL and OpenCV for dimension extraction
 try:
@@ -30,6 +31,7 @@ except ImportError:
     CV2_AVAILABLE = False
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 CORS(app)
 
 # Track start time for uptime
@@ -45,9 +47,9 @@ except Exception as e:
     print("   API will continue but authentication will not work")
 
 # File upload configuration
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'mov', 'avi'}
-MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
+UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
+ALLOWED_EXTENSIONS = None  # Allow all file types
+MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 104857600))  # Default: 100MB (100 * 1024 * 1024)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
@@ -57,6 +59,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Initialize database
 db = get_db()
+
+# Register admin blueprint
+app.register_blueprint(admin_blueprint)
 
 def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
     """
@@ -227,16 +232,24 @@ def ensure_user_exists(user_info: dict) -> dict:
     return db.get_user_by_firebase_uid(firebase_uid)
 
 def allowed_file(filename):
-    """Check if file extension is allowed"""
+    """Check if file extension is allowed (all files allowed if ALLOWED_EXTENSIONS is None)"""
+    if ALLOWED_EXTENSIONS is None:
+        return True  # Allow all file types
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_file_type(filename):
     """Determine file type based on extension"""
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-    if ext in {'png', 'jpg', 'jpeg', 'gif'}:
+    
+    # Image types
+    if ext in {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'}:
         return 'image'
-    elif ext in {'mp4', 'mov', 'avi'}:
+    
+    # Video types
+    elif ext in {'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', 'mpeg', 'mpg'}:
         return 'video'
+    
+    # Default to file for everything else
     else:
         return 'file'
 
@@ -302,6 +315,35 @@ def process_file_upload(file):
     
     return attachment
 
+def determine_message_type(message: dict) -> str:
+    """
+    Determine message type at runtime based on content and attachments.
+    Returns: 'text', 'image', 'video', 'file', 'image+text', 'video+text', 'file+text'
+    """
+    has_text = bool(message.get('text_content') or message.get('content', '').strip())
+    has_attachment = message.get('has_attachment', False)
+    
+    if not has_attachment:
+        return 'text'
+    
+    # Get attachments
+    attachments = message.get('attachments', [])
+    if not attachments:
+        # Legacy format - check for filename field
+        if message.get('filename'):
+            file_type = get_file_type(message.get('filename', ''))
+            return f"{file_type}+text" if has_text else file_type
+        return 'text'
+    
+    # Determine primary attachment type (use first attachment's type)
+    primary_type = attachments[0].get('type', 'file')
+    
+    # Return combined type if text is present
+    if has_text:
+        return f"{primary_type}+text"
+    else:
+        return primary_type
+
 # ============================================================================
 # THREAD ENDPOINTS (Protected)
 # ============================================================================
@@ -311,7 +353,11 @@ def process_file_upload(file):
 def handle_threads():
     """
     GET: List all threads for authenticated user (auto-syncs with Hyptrb campaigns)
-    POST: Create a new thread
+         Each thread includes:
+         - conversation_count: Number of conversations in the thread
+         - conversations: Simplified list of conversations with essential fields
+           - last_message_type: Computed at runtime (text, image, video, file, image+text, video+text, file+text)
+    POST: Create a new thread (includes conversation data in response)
     """
     user = get_current_user()
     user_id = user['uid']
@@ -359,6 +405,37 @@ def handle_threads():
         # Get threads where user is creator OR participant in any conversation
         user_threads = db.get_threads_for_user(user_id)
         
+        # Enrich each thread with conversation data
+        for thread in user_threads:
+            thread_id = thread['id']
+            conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
+            
+            # Add conversation count
+            thread['conversation_count'] = len(conversations)
+            
+            # Add simplified conversation list (only essential fields)
+            enriched_conversations = []
+            for conv in conversations:
+                # Get last message to determine type
+                last_msg = db.get_last_message(conv['id'])
+                last_message_type = determine_message_type(last_msg) if last_msg else 'text'
+                
+                enriched_conversations.append({
+                    'id': conv['id'],
+                    'name': conv.get('name'),
+                    'participant1_id': conv.get('participant1_id'),
+                    'participant1_name': conv.get('participant1_name'),
+                    'participant2_id': conv.get('participant2_id'),
+                    'participant2_name': conv.get('participant2_name'),
+                    'last_message': conv.get('last_message'),
+                    'last_message_time': conv.get('last_message_time'),
+                    'last_message_type': last_message_type,
+                    'unread_count': conv.get('unread_count', 0),
+                    'updated_at': conv.get('updated_at')
+                })
+            
+            thread['conversations'] = enriched_conversations
+        
         print(f"📋 Returning {len(user_threads)} threads for {user_email}")
         
         return jsonify({
@@ -377,6 +454,32 @@ def handle_threads():
         
         thread_id = db.create_thread(data)
         thread = db.get_thread_by_id(thread_id)
+        
+        # Enrich thread with conversation data
+        conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
+        thread['conversation_count'] = len(conversations)
+        
+        enriched_conversations = []
+        for conv in conversations:
+            # Get last message to determine type
+            last_msg = db.get_last_message(conv['id'])
+            last_message_type = determine_message_type(last_msg) if last_msg else 'text'
+            
+            enriched_conversations.append({
+                'id': conv['id'],
+                'name': conv.get('name'),
+                'participant1_id': conv.get('participant1_id'),
+                'participant1_name': conv.get('participant1_name'),
+                'participant2_id': conv.get('participant2_id'),
+                'participant2_name': conv.get('participant2_name'),
+                'last_message': conv.get('last_message'),
+                'last_message_time': conv.get('last_message_time'),
+                'last_message_type': last_message_type,
+                'unread_count': conv.get('unread_count', 0),
+                'updated_at': conv.get('updated_at')
+            })
+        
+        thread['conversations'] = enriched_conversations
         
         return jsonify({
             'message': 'Thread created successfully',
@@ -575,6 +678,160 @@ def join_conversation(thread_id, conversation_id):
         'message': 'Successfully joined conversation',
         'conversation': updated_conversation
     }), 200
+
+@app.route('/messages/campaigns/<campaign_id>/join', methods=['POST'])
+@require_auth
+def join_campaign(campaign_id):
+    """
+    Join a campaign thread as an admin
+    Only admins can join campaigns
+    Creates a conversation between the admin and the campaign owner
+    """
+    user = get_current_user()
+    user_id = user['uid']
+    db_user = ensure_user_exists(user)
+    
+    # Check if user is an admin
+    user_role = db_user.get('role')
+    if user_role != 'admin':
+        return jsonify({
+            'error': 'Access denied. Only admins can join campaigns',
+            'user_role': user_role
+        }), 403
+    
+    # Find thread by campaign_id
+    conn = db.get_connection()
+    try:
+        cursor = conn.execute('SELECT * FROM threads WHERE campaign_id = ?', (campaign_id,))
+        thread_row = cursor.fetchone()
+        
+        if not thread_row:
+            return jsonify({'error': 'Campaign thread not found'}), 404
+        
+        thread = dict(thread_row)
+        thread_id = thread['id']
+        campaign_owner_id = thread['created_by']
+        
+        # Check if admin is trying to join their own campaign
+        if campaign_owner_id == user_id:
+            return jsonify({'error': 'You cannot join your own campaign'}), 400
+        
+        # Get campaign owner info
+        owner_user = db.get_user_by_firebase_uid(campaign_owner_id)
+        if not owner_user:
+            return jsonify({'error': 'Campaign owner not found in database'}), 404
+        
+        # Get admin info
+        admin_name = db_user.get('display_name', 'Admin')
+        admin_avatar = db_user.get('photo_url', '')
+        
+        # Create or get conversation between campaign owner and admin
+        conversation_name = f"{thread.get('title', 'Campaign')} - Admin Support"
+        
+        conversation_id = db.get_or_create_conversation(
+            thread_id=thread_id,
+            participant1_id=campaign_owner_id,
+            participant2_id=user_id,
+            participant1_name=owner_user.get('display_name', 'Campaign Owner'),
+            participant2_name=admin_name,
+            participant1_avatar=owner_user.get('photo_url', ''),
+            participant2_avatar=admin_avatar,
+            name=conversation_name
+        )
+        
+        conversation = db.get_conversation_by_id(conversation_id)
+        
+        return jsonify({
+            'message': 'Successfully joined campaign',
+            'campaign_id': campaign_id,
+            'thread_id': thread_id,
+            'conversation': conversation
+        }), 200
+        
+    finally:
+        conn.close()
+
+@app.route('/messages/admin/chat/<user_firebase_uid>', methods=['POST'])
+@require_auth
+def admin_start_chat(user_firebase_uid):
+    """
+    Start a direct chat with any user as an admin
+    Only admins can use this endpoint
+    Creates a dedicated admin support thread and conversation
+    """
+    user = get_current_user()
+    admin_id = user['uid']
+    db_user = ensure_user_exists(user)
+    
+    # Check if user is an admin
+    admin_role = db_user.get('role')
+    if admin_role != 'admin':
+        return jsonify({
+            'error': 'Access denied. Only admins can start direct chats',
+            'user_role': admin_role
+        }), 403
+    
+    # Check if admin is trying to chat with themselves
+    if user_firebase_uid == admin_id:
+        return jsonify({'error': 'You cannot start a chat with yourself'}), 400
+    
+    # Get target user info
+    target_user = db.get_user_by_firebase_uid(user_firebase_uid)
+    if not target_user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get admin info
+    admin_name = db_user.get('display_name', 'Admin')
+    admin_avatar = db_user.get('photo_url', '')
+    
+    target_name = target_user.get('display_name', 'User')
+    target_avatar = target_user.get('photo_url', '')
+    
+    # Create or get admin support thread for this user
+    # Use a special campaign_id format for admin chats: "admin_support_{user_uid}"
+    admin_thread_campaign_id = f"admin_support_{user_firebase_uid}"
+    
+    thread_data = {
+        'title': f"Admin Support - {target_name}",
+        'description': f"Direct admin support chat with {target_name}",
+        'campaign_id': admin_thread_campaign_id,
+        'created_by': admin_id,
+        'status': 'active'
+    }
+    
+    try:
+        thread_id = db.create_thread(thread_data)
+        thread = db.get_thread_by_id(thread_id)
+        
+        # Create or get conversation between admin and user
+        conversation_name = f"Admin Support - {target_name}"
+        
+        conversation_id = db.get_or_create_conversation(
+            thread_id=thread_id,
+            participant1_id=admin_id,
+            participant2_id=user_firebase_uid,
+            participant1_name=admin_name,
+            participant2_name=target_name,
+            participant1_avatar=admin_avatar,
+            participant2_avatar=target_avatar,
+            name=conversation_name
+        )
+        
+        conversation = db.get_conversation_by_id(conversation_id)
+        
+        return jsonify({
+            'message': 'Admin chat started successfully',
+            'user_firebase_uid': user_firebase_uid,
+            'thread_id': thread_id,
+            'thread': thread,
+            'conversation': conversation
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Failed to create admin chat',
+            'details': str(e)
+        }), 500
 
 @app.route('/messages/threads/<thread_id>/conversations/<conversation_id>', methods=['GET', 'POST', 'PUT'])
 @require_auth
@@ -776,53 +1033,13 @@ def handle_message(thread_id, conversation_id, message_id):
             return jsonify({'error': 'Failed to delete message'}), 500
 
 # ============================================================================
-# FILE UPLOAD ENDPOINTS (Protected)
+# FILE SERVING ENDPOINT (Public)
 # ============================================================================
-
-@app.route('/uploads', methods=['POST'])
-@require_auth
-def upload_files():
-    """Upload single or multiple files (requires authentication)"""
-    user = get_current_user()
-    ensure_user_exists(user)
-    
-    # Check for multiple files
-    files = request.files.getlist('files')
-    
-    # Fallback to single file if 'files' not present
-    if not files or not files[0].filename:
-        files = [request.files.get('file')]
-    
-    if not files or not files[0]:
-        return jsonify({'error': 'No files provided'}), 400
-    
-    uploaded_files = []
-    
-    for file in files:
-        if file and file.filename:
-            attachment = process_file_upload(file)
-            if attachment:
-                uploaded_files.append(attachment)
-    
-    if not uploaded_files:
-        return jsonify({'error': 'No valid files uploaded'}), 400
-    
-    # Return appropriate response based on number of files
-    if len(uploaded_files) == 1:
-        return jsonify({
-            'message': 'File uploaded successfully',
-            **uploaded_files[0]
-        }), 201
-    else:
-        return jsonify({
-            'message': f'{len(uploaded_files)} files uploaded successfully',
-            'files': uploaded_files
-        }), 201
 
 @app.route('/uploads/<filename>', methods=['GET'])
 @optional_auth
 def serve_file(filename):
-    """Serve uploaded file (public access for now, can be restricted)"""
+    """Serve uploaded files (files are uploaded as part of message sending)"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # ============================================================================
@@ -830,55 +1047,9 @@ def serve_file(filename):
 # ============================================================================
 
 @app.route('/', methods=['GET'])
-def status_page():
-    """ Beautiful status page (public)"""
-    # Calculate uptime
-    uptime_seconds = int(time.time() - START_TIME)
-    uptime_delta = timedelta(seconds=uptime_seconds)
-    
-    # Format uptime
-    days = uptime_delta.days
-    hours, remainder = divmod(uptime_delta.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    
-    if days > 0:
-        uptime_str = f"{days}d {hours}h {minutes}m"
-    elif hours > 0:
-        uptime_str = f"{hours}h {minutes}m"
-    else:
-        uptime_str = f"{minutes}m {seconds}s"
-    
-    # Check database status
-    try:
-        stats = db.get_stats()
-        database_status = {"text": "Connected", "icon": "fa-check-circle", "color": "#3fb950"}
-    except:
-        database_status = {"text": "Error", "icon": "fa-times-circle", "color": "#f85149"}
-    
-    # Check Firebase status
-    if FIREBASE_INITIALIZED:
-        firebase_status = {"text": "Active", "icon": "fa-check-circle", "color": "#3fb950"}
-    else:
-        firebase_status = {"text": "Not Configured", "icon": "fa-exclamation-triangle", "color": "#d29922"}
-    
-    return render_template('status.html',
-        status="Online",
-        version="1.0.0",
-        uptime=uptime_str,
-        database_status=database_status,
-        firebase_status=firebase_status
-    )
-
-@app.route('/stats', methods=['GET'])
-def stats_endpoint():
-    """Stats endpoint (public)"""
-    stats = db.get_stats()
-    
-    return jsonify({
-        'status': 'ok',
-        'timestamp': datetime.now().isoformat(),
-        'stats': stats
-    })
+def index():
+    """Redirect to admin login"""
+    return redirect(url_for('admin_blueprint.login'))
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -887,11 +1058,6 @@ def health_check():
         'status': 'ok',
         'timestamp': datetime.now().isoformat()
     })
-
-@app.route('/docs', methods=['GET'])
-def docs():
-    """API documentation endpoint (public)"""
-    return render_template('docs.html')
 
 @app.route('/auth/test', methods=['GET'])
 @require_auth
@@ -985,4 +1151,9 @@ def list_users():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # Load configuration from environment variables
+    debug_mode = os.getenv('FLASK_DEBUG', 'True').lower() in ('true', '1', 'yes')
+    api_host = os.getenv('API_HOST', '0.0.0.0')
+    api_port = int(os.getenv('API_PORT', 5001))
+    
+    app.run(debug=debug_mode, host=api_host, port=api_port)

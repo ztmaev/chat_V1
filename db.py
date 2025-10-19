@@ -633,6 +633,27 @@ class MessagingDatabase:
         finally:
             conn.close()
     
+    def get_last_message(self, conversation_id: str) -> Optional[Dict]:
+        """Get the last message in a conversation"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute('''
+                SELECT * FROM messages 
+                WHERE conversation_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            ''', (conversation_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                message = dict(row)
+                message['deleted'] = bool(message['deleted'])
+                message['has_attachment'] = bool(message.get('has_attachment', False))
+                return message
+            return None
+        finally:
+            conn.close()
+    
     def create_message(self, message_data: Dict) -> str:
         """Create a new message"""
         message_id = message_data.get('id', f"m{uuid.uuid4().hex[:8]}")
@@ -738,7 +759,7 @@ class MessagingDatabase:
             cursor = conn.execute('''
                 SELECT 
                     COUNT(*) as total_conversations,
-                    SUM(unread_count) as total_unread
+                    COALESCE(SUM(unread_count), 0) as unread_messages
                 FROM conversations
                 WHERE status = 'active'
             ''')
@@ -748,6 +769,14 @@ class MessagingDatabase:
                 SELECT COUNT(*) as total_messages
                 FROM messages
                 WHERE deleted = FALSE
+            ''')
+            stats.update(dict(cursor.fetchone()))
+            
+            cursor = conn.execute('''
+                SELECT COUNT(DISTINCT id) as messages_with_attachments
+                FROM messages
+                WHERE deleted = FALSE
+                AND has_attachment = TRUE
             ''')
             stats.update(dict(cursor.fetchone()))
             

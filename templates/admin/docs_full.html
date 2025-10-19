@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - Chat API Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+
+        .navbar-brand i {
+            font-size: 24px;
+        }
+
+        .navbar-menu {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .navbar-link {
+            color: #8b949e;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .navbar-link:hover {
+            background: #21262d;
+            color: #c9d1d9;
+        }
+
+        .navbar-link.active {
+            background: #21262d;
+            color: #58a6ff;
+        }
+
+        .logout-btn {
+            background: #da3633;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #b62324;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-header h1 {
+            font-size: 32px;
+            color: #c9d1d9;
+            margin-bottom: 8px;
+        }
+
+        .page-header p {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        .docs-content {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 32px;
+            line-height: 1.6;
+        }
+
+        .docs-content h3 {
+            color: #f0f6fc;
+            margin: 32px 0 16px 0;
+            font-size: 1.25em;
+        }
+
+        .docs-content h3:first-child {
+            margin-top: 0;
+        }
+
+        .docs-content h4 {
+            color: #58a6ff;
+            margin: 24px 0 12px 0;
+            font-size: 1.1em;
+        }
+
+        .docs-content p {
+            color: #8b949e;
+            margin-bottom: 16px;
+        }
+
+        .docs-content pre {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        .docs-content code {
+            color: #c9d1d9;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .method-get {
+            background: #1f6feb;
+            color: white;
+        }
+
+        .method-post {
+            background: #238636;
+            color: white;
+        }
+
+        .method-put {
+            background: #d29922;
+            color: white;
+        }
+
+        .method-delete {
+            background: #da3633;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .navbar-menu {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <i class="fas fa-comments"></i>
+            <span>Chat API Admin</span>
+        </div>
+        <div class="navbar-menu">
+            <a href="{{ url_for('admin_blueprint.dashboard') }}" class="navbar-link">
+                <i class="fas fa-home"></i>
+                Dashboard
+            </a>
+            <a href="{{ url_for('admin_blueprint.api_stats') }}" class="navbar-link">
+                <i class="fas fa-chart-bar"></i>
+                Statistics
+            </a>
+            <a href="{{ url_for('admin_blueprint.docs') }}" class="navbar-link active">
+                <i class="fas fa-book"></i>
+                API Docs
+            </a>
+            <form method="POST" action="{{ url_for('admin_blueprint.logout') }}" style="display: inline;">
+                <button type="submit" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </button>
+            </form>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-book"></i> API Documentation</h1>
+            <p>Complete reference for the Chat API endpoints</p>
+        </div>
+
+        <div class="docs-content">
+            <h3><i class="fas fa-rocket"></i> Getting Started</h3>
+            <p>
+                The Hyptrb Chat API provides a secure, thread-based messaging system with Firebase authentication.
+                All endpoints require authentication unless marked as public.
+            </p>
+
+            <h3><i class="fas fa-shield-alt"></i> Authentication</h3>
+            <p>Include your Firebase ID token in the Authorization header:</p>
+            <pre><code>Authorization: Bearer YOUR_FIREBASE_TOKEN</code></pre>
+
+            <h3><i class="fas fa-network-wired"></i> Core Endpoints</h3>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /health
+            </h4>
+            <p>Health check endpoint (public)</p>
+            <pre><code>{
+  "status": "ok",
+  "timestamp": "2025-10-18T01:00:00.000000"
+}</code></pre>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /messages/threads
+            </h4>
+            <p>List all message threads for authenticated user (requires auth)</p>
+            <pre><code>{
+  "threads": [...],
+  "total_count": 5,
+  "user_id": "firebase_uid"
+}</code></pre>
+
+            <h4>
+                <span class="method-badge method-post">POST</span>
+                /messages/threads
+            </h4>
+            <p>Create a new thread (requires auth)</p>
+            <pre><code>{
+  "title": "Campaign Name",
+  "description": "Thread description",
+  "campaign_id": "campaign_123",
+  "status": "active"
+}</code></pre>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /messages/threads/{thread_id}
+            </h4>
+            <p>Get thread details with conversations (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /messages/threads/{thread_id}/conversations
+            </h4>
+            <p>List conversations in a thread (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-post">POST</span>
+                /messages/threads/{thread_id}/conversations
+            </h4>
+            <p>Create a conversation in a thread (requires auth)</p>
+            <pre><code>{
+  "other_participant_id": "firebase_uid",
+  "name": "Conversation Name"
+}</code></pre>
+
+            <h4 style="border-left: 3px solid #d29922; padding-left: 12px;">
+                <span class="method-badge method-post">POST</span>
+                /messages/campaigns/{campaign_id}/join
+                <span style="background: #d29922; color: #0d1117; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; margin-left: 8px;">ADMIN ONLY</span>
+            </h4>
+            <p>Join a campaign thread as an admin (requires admin role)</p>
+            <p style="font-size: 0.9em;">
+                This endpoint allows admins to join any campaign thread and create a conversation with the campaign owner.
+                Only users with role='admin' can use this endpoint.
+            </p>
+            <p><strong>Request Body:</strong></p>
+            <pre><code>// No request body required
+// Campaign ID is provided in the URL path</code></pre>
+            <p><strong>Success Response (200):</strong></p>
+            <pre><code>{
+  "message": "Successfully joined campaign",
+  "campaign_id": "68ba588b8500561576b8f3fd",
+  "thread_id": "t12345abc",
+  "conversation": {
+    "id": "c67890def",
+    "name": "Campaign Name - Admin Support",
+    "participant1_id": "owner_uid",
+    "participant2_id": "admin_uid",
+    ...
+  }
+}</code></pre>
+            <p><strong>Error Responses:</strong></p>
+            <pre><code>// 403 Forbidden - Not an admin
+{ "error": "Access denied. Only admins can join campaigns" }
+
+// 404 Not Found - Campaign doesn't exist
+{ "error": "Campaign thread not found" }
+
+// 400 Bad Request - Trying to join own campaign
+{ "error": "You cannot join your own campaign" }</code></pre>
+
+            <h4 style="border-left: 3px solid #d29922; padding-left: 12px;">
+                <span class="method-badge method-post">POST</span>
+                /messages/admin/chat/{user_firebase_uid}
+                <span style="background: #d29922; color: #0d1117; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; margin-left: 8px;">ADMIN ONLY</span>
+            </h4>
+            <p>Start a direct chat with any user as an admin (requires admin role)</p>
+            <p style="font-size: 0.9em;">
+                Creates a dedicated admin support thread and conversation with the specified user.
+                Only users with role='admin' can use this endpoint.
+            </p>
+            <p><strong>Request Body:</strong></p>
+            <pre><code>// No request body required
+// User Firebase UID is provided in the URL path</code></pre>
+            <p><strong>Success Response (200):</strong></p>
+            <pre><code>{
+  "message": "Admin chat started successfully",
+  "user_firebase_uid": "user123abc",
+  "thread_id": "t98765xyz",
+  "thread": {
+    "id": "t98765xyz",
+    "title": "Admin Support - John Doe",
+    "campaign_id": "admin_support_user123abc"
+  },
+  "conversation": {
+    "id": "c54321def",
+    "name": "Admin Support - John Doe",
+    "participant1_id": "admin_uid",
+    "participant2_id": "user123abc"
+  }
+}</code></pre>
+            <p><strong>Error Responses:</strong></p>
+            <pre><code>// 403 Forbidden - Not an admin
+{ "error": "Access denied. Only admins can start direct chats" }
+
+// 404 Not Found - User doesn't exist
+{ "error": "User not found" }
+
+// 400 Bad Request - Trying to chat with yourself
+{ "error": "You cannot start a chat with yourself" }</code></pre>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /messages/threads/{thread_id}/conversations/{conversation_id}
+            </h4>
+            <p>Get messages in a conversation (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-post">POST</span>
+                /messages/threads/{thread_id}/conversations/{conversation_id}
+            </h4>
+            <p>Send a message (requires auth)</p>
+            <pre><code>{
+  "content": "Message text",
+  "type": "text"
+}</code></pre>
+
+            <h4>
+                <span class="method-badge method-put">PUT</span>
+                /messages/threads/{thread_id}/conversations/{conversation_id}
+            </h4>
+            <p>Mark conversation as read (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-delete">DELETE</span>
+                /messages/threads/{thread_id}/conversations/{conversation_id}/{message_id}
+            </h4>
+            <p>Delete a message (requires auth, sender only)</p>
+
+            <h4>
+                <span class="method-badge method-post">POST</span>
+                /uploads
+            </h4>
+            <p>Upload files (requires auth)</p>
+            <p>Supports multiple files via multipart/form-data</p>
+
+            <h3><i class="fas fa-user"></i> User Management</h3>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /users/me
+            </h4>
+            <p>Get current user profile (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-put">PUT</span>
+                /users/me
+            </h4>
+            <p>Update current user profile (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /users/{firebase_uid}
+            </h4>
+            <p>Get user by Firebase UID (requires auth)</p>
+
+            <h4>
+                <span class="method-badge method-get">GET</span>
+                /users
+            </h4>
+            <p>List all users with pagination (requires auth)</p>
+            <p>Query parameters: limit, offset</p>
+
+            <h3><i class="fas fa-info-circle"></i> Additional Information</h3>
+            <p>
+                <strong>File Upload Limits:</strong> Maximum file size is 16MB<br>
+                <strong>Supported File Types:</strong> Images (png, jpg, jpeg, gif), Videos (mp4, mov, avi), Documents (pdf, doc, docx)<br>
+                <strong>Rate Limiting:</strong> No rate limiting currently implemented<br>
+                <strong>CORS:</strong> Enabled for all origins in development
+            </p>
+        </div>
+    </div>
+
+    <style>
+        .code-block-wrapper {
+            position: relative;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: background 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: #2ea043;
+        }
+        
+        .copy-btn.copied {
+            background: #1f6feb;
+        }
+    </style>
+
+    <script>
+        function copyCode(button) {
+            const wrapper = button.parentElement;
+            const pre = wrapper.querySelector('pre');
+            const code = pre.querySelector('code');
+            const text = code.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalHTML = button.innerHTML;
+                
+                button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+        
+        // Add copy buttons to all pre blocks
+        document.addEventListener('DOMContentLoaded', function() {
+            const preBlocks = document.querySelectorAll('pre');
+            
+            preBlocks.forEach(pre => {
+                if (pre.parentElement.classList.contains('code-block-wrapper')) {
+                    return;
+                }
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = 'code-block-wrapper';
+                wrapper.style.position = 'relative';
+                
+                const button = document.createElement('button');
+                button.onclick = function() { copyCode(this); };
+                button.className = 'copy-btn';
+                button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+                
+                pre.parentNode.insertBefore(wrapper, pre);
+                wrapper.appendChild(pre);
+                wrapper.appendChild(button);
+            });
+        });
+    </script>
+</body>
+</html>
