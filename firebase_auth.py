@@ -121,6 +121,13 @@ def require_auth(f):
             # Verify token
             decoded_token = verify_firebase_token(id_token)
             
+            # Ensure decoded_token is a dictionary
+            if not isinstance(decoded_token, dict):
+                return jsonify({
+                    'error': 'Authentication failed',
+                    'message': f'Invalid token format: expected dict, got {type(decoded_token).__name__}'
+                }), 401
+            
             # Attach user info to request object
             request.user = decoded_token
             
@@ -128,6 +135,9 @@ def require_auth(f):
             return f(*args, **kwargs)
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"❌ Authentication error: {error_details}")
             return jsonify({
                 'error': 'Authentication failed',
                 'message': str(e)

@@ -150,7 +150,14 @@ def ensure_user_exists(user_info: dict) -> dict:
     Ensure user exists in database, create/update if needed.
     Fetches user role and profile from Hyptrb API on first access.
     """
-    firebase_uid = user_info['uid']
+    # Validate user_info is a dictionary
+    if not isinstance(user_info, dict):
+        raise ValueError(f"user_info must be a dictionary, got {type(user_info).__name__}: {user_info}")
+    
+    firebase_uid = user_info.get('uid')
+    if not firebase_uid:
+        raise ValueError("user_info must contain 'uid' field")
+    
     email = user_info.get('email')
     
     # Check if user already exists in database
