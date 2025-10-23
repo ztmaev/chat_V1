@@ -9,22 +9,13 @@ services:
     restart: unless-stopped
     ports:
       - "5001:5001"
+    env_file:
+      - .env
     environment:
-      # Flask Configuration
-      - FLASK_ENV=${FLASK_ENV:-production}
-      - FLASK_DEBUG=${FLASK_DEBUG:-False}
+      # Override specific settings for Docker
       - API_PORT=5001
       - API_HOST=0.0.0.0
-      
-      # File Upload Configuration
-      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-16777216}
       - UPLOAD_FOLDER=uploads
-      
-      # Firebase Configuration (use JSON string for production)
-      - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON:-}
-      
-      # CORS Configuration
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     volumes:
       # Persist database
       - ./messaging.db:/app/messaging.db

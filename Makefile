@@ -8,8 +8,8 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  build      - Build Docker image"
-	@echo "  start      - Start containers in development mode"
-	@echo "  prod       - Start containers in production mode"
+	@echo "  start      - Start containers (detached mode)"
+	@echo "  dev        - Start containers (foreground mode)"
 	@echo "  stop       - Stop containers"
 	@echo "  restart    - Restart containers"
 	@echo "  logs       - View container logs"
@@ -21,30 +21,29 @@ help:
 	@echo "  init       - Initialize database with demo data"
 	@echo "  clean      - Remove containers and volumes"
 	@echo ""
+	@echo "Configuration: Edit .env file to customize settings"
+	@echo ""
 
 # Build Docker image
 build:
 	@echo "Building Docker image..."
 	docker-compose build --no-cache
 
-# Start in development mode
+# Start containers
 start:
-	@echo "Starting Chat API (development mode)..."
+	@echo "Starting Chat API..."
 	docker-compose up -d
 	@echo "API available at http://localhost:5001"
 	@echo "View logs: make logs"
 
-# Start in development mode with hot reload
+# Start in foreground (for development)
 dev:
-	@echo "Starting Chat API (development mode with hot reload)..."
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+	@echo "Starting Chat API (foreground mode)..."
+	docker-compose up
 	@echo "API available at http://localhost:5001"
 
-# Start in production mode
-prod:
-	@echo "Starting Chat API (production mode)..."
-	docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-	@echo "API available at http://localhost:5001"
+# Alias for start (for backward compatibility)
+prod: start
 
 # Stop containers
 stop:

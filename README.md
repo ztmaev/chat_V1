@@ -216,19 +216,22 @@ docker-compose logs -f chat-api
 
 # Stop services
 docker-compose down
-
-# Production deployment
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 ### Docker Features
 
 - ✅ Automated container setup with health checks
 - ✅ Persistent database and uploads via volumes
-- ✅ Production-ready configuration
+- ✅ Environment-based configuration via .env file
 - ✅ Resource limits and logging
 - ✅ Easy backup and restore
 - ✅ Isolated network for security
+
+### Environment Configuration
+
+The Docker setup uses a `.env` file for configuration. On first run, the startup script will create one from `.env.example` if it doesn't exist.
+
+**Important:** Make sure to set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in your `.env` file to avoid the warning message.
 
 ### Using Make Commands
 

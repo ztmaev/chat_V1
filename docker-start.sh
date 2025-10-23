@@ -48,25 +48,30 @@ if [ ! -f "serviceAccountKey.json" ]; then
     fi
 fi
 
-# Check if .env file exists
+# Check if .env file exists - copy from parent directory if needed
 if [ ! -f ".env" ]; then
-    print_info "Creating .env file from template..."
-    cp .env.docker .env
-    print_info ".env file created. You can edit it to customize configuration."
+    print_warn ".env file not found in current directory"
+    if [ -f "../.env" ]; then
+        print_info "Copying .env from parent directory..."
+        cp ../.env .env
+        print_info ".env file copied successfully"
+    elif [ -f ".env.example" ]; then
+        print_info "Creating .env from .env.example..."
+        cp .env.example .env
+        print_warn "Please edit .env file and set ADMIN_USERNAME and ADMIN_PASSWORD"
+    else
+        print_error "No .env or .env.example found. Cannot proceed."
+        exit 1
+    fi
 fi
 
 # Parse command line arguments
 COMMAND=${1:-start}
-MODE=${2:-dev}
 
 case $COMMAND in
     start)
-        print_info "Starting Chat API in $MODE mode..."
-        if [ "$MODE" = "prod" ]; then
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-        else
-            docker-compose up -d
-        fi
+        print_info "Starting Chat API..."
+        docker-compose up -d
         print_info "Chat API is starting..."
         sleep 3
         docker-compose ps
@@ -101,11 +106,7 @@ case $COMMAND in
         print_info "Rebuilding and restarting Chat API..."
         docker-compose down
         docker-compose build --no-cache
-        if [ "$MODE" = "prod" ]; then
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-        else
-            docker-compose up -d
-        fi
+        docker-compose up -d
         print_info "Chat API rebuilt and started."
         ;;
     
@@ -165,15 +166,15 @@ case $COMMAND in
     help|*)
         echo "Chat API Docker Management Script"
         echo ""
-        echo "Usage: ./docker-start.sh [command] [mode]"
+        echo "Usage: ./docker-start.sh [command]"
         echo ""
         echo "Commands:"
-        echo "  start [dev|prod]  - Start the API (default: dev)"
+        echo "  start             - Start the API"
         echo "  stop              - Stop the API"
         echo "  restart           - Restart the API"
         echo "  logs              - View API logs"
         echo "  build             - Build the Docker image"
-        echo "  rebuild [dev|prod]- Rebuild and restart"
+        echo "  rebuild           - Rebuild and restart"
         echo "  shell             - Open shell in container"
         echo "  status            - Show container status"
         echo "  backup            - Backup database"
@@ -183,10 +184,12 @@ case $COMMAND in
         echo "  help              - Show this help message"
         echo ""
         echo "Examples:"
-        echo "  ./docker-start.sh start          # Start in development mode"
-        echo "  ./docker-start.sh start prod     # Start in production mode"
-        echo "  ./docker-start.sh logs           # View logs"
-        echo "  ./docker-start.sh backup         # Backup database"
+        echo "  ./docker-start.sh start              # Start the API"
+        echo "  ./docker-start.sh logs               # View logs"
+        echo "  ./docker-start.sh backup             # Backup database"
         echo "  ./docker-start.sh restore backup.db  # Restore database"
+        echo ""
+        echo "Configuration:"
+        echo "  Edit .env file to customize settings (FLASK_ENV, ADMIN_USERNAME, etc.)"
         ;;
 esac
