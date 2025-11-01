@@ -109,35 +109,58 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                         print(f"  ⚠️  Failed to create thread for campaign {campaign_name}: {e}")
         
         elif role == 'influencer':
-            # Fetch influencer collaborations
-            collaborations = fetch_influencer_collaborations(firebase_uid)
-            current_clients = collaborations.get('current_clients', [])
+            # Fetch influencer jobs/campaigns (fetch all pages)
+            all_jobs = []
+            page = 1
             
-            # Count total campaigns
-            total_campaigns = sum(len(client.get('campaigns', [])) for client in current_clients)
-            print(f"🔄 Syncing {total_campaigns} campaigns for influencer {firebase_uid}")
+            # Fetch first page to get total info
+            jobs_data = fetch_influencer_jobs(firebase_uid, page=1)
+            total_jobs = jobs_data.get('totalJobs', 0)
+            total_pages = jobs_data.get('totalPages', 1)
+            all_jobs.extend(jobs_data.get('jobs', []))
             
-            # Create thread for each campaign in current collaborations
-            for client in current_clients:
-                campaigns = client.get('campaigns', [])
-                for campaign in campaigns:
-                    campaign_id = campaign.get('campaign_id')
-                    campaign_name = campaign.get('campaign_name', 'Unnamed Campaign')
+            print(f"🔄 Syncing {total_jobs} jobs across {total_pages} pages for influencer {firebase_uid}")
+            
+            # Fetch remaining pages if any
+            for page in range(2, total_pages + 1):
+                try:
+                    jobs_data = fetch_influencer_jobs(firebase_uid, page=page)
+                    all_jobs.extend(jobs_data.get('jobs', []))
+                except Exception as e:
+                    print(f"  ⚠️  Failed to fetch page {page}: {e}")
+            
+            # Group jobs by campaign to avoid duplicate threads
+            campaigns_dict = {}
+            for job in all_jobs:
+                # Extract campaign details from the job
+                campaign_details_list = job.get('campaignDetails', [])
+                if campaign_details_list and len(campaign_details_list) > 0:
+                    campaign_detail = campaign_details_list[0]
+                    campaign_id = campaign_detail.get('campaignId')
+                    campaign_name = campaign_detail.get('campaignName', 'Unnamed Campaign')
                     
-                    if campaign_id:
-                        thread_data = {
-                            'title': campaign_name,
-                            'description': f"Messages for campaign {campaign_name}",
-                            'campaign_id': campaign_id,
-                            'created_by': firebase_uid,
-                            'status': 'active'
-                        }
-                        try:
-                            thread_id = db.create_thread(thread_data)
-                            threads_created += 1
-                            print(f"  ✅ Thread synced: {thread_id} for campaign {campaign_name}")
-                        except Exception as e:
-                            print(f"  ⚠️  Failed to create thread for campaign {campaign_name}: {e}")
+                    if campaign_id and campaign_id not in campaigns_dict:
+                        campaigns_dict[campaign_id] = campaign_name
+            
+            print(f"  📊 Found {len(campaigns_dict)} unique campaigns from {len(all_jobs)} jobs")
+            
+            # Create thread for each unique campaign
+            for campaign_id, campaign_name in campaigns_dict.items():
+                thread_data = {
+                    'title': campaign_name,
+                    'description': f"Messages for campaign {campaign_name}",
+                    'campaign_id': campaign_id,
+                    'created_by': firebase_uid,
+                    'status': 'active'
+                }
+                try:
+                    thread_id = db.create_thread(thread_data)
+                    threads_created += 1
+                    print(f"  ✅ Thread synced: {thread_id} for campaign {campaign_name}")
+                except Exception as e:
+                    # Thread might already exist (UNIQUE constraint on campaign_id + created_by)
+                    if 'UNIQUE constraint failed' not in str(e):
+                        print(f"  ⚠️  Failed to create thread for campaign {campaign_name}: {e}")
     
     except HyptrbAPIError as e:
         print(f"⚠️  Warning: Failed to fetch campaigns for {email}: {e}")
