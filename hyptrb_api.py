@@ -233,3 +233,43 @@ def fetch_influencer_collaborations(influencer_uid: str, page: int = 1, limit: i
         return response.json()
     except requests.exceptions.RequestException as e:
         raise HyptrbAPIError(f"Network error fetching influencer collaborations: {str(e)}")
+
+def fetch_influencer_jobs(influencer_uid: str, page: int = 1) -> Dict:
+    """
+    Fetch jobs/campaigns for an influencer from Hyptrb API
+    
+    Args:
+        influencer_uid: Influencer's unique identifier
+        page: Page number for pagination (default: 1)
+        
+    Returns:
+        Dict with job information including:
+        - influencer_uid: Influencer's UID
+        - totalJobs: Total number of jobs
+        - totalPages: Total number of pages
+        - currentPage: Current page number
+        - jobs: List of job objects with campaign details, status, rates, etc.
+        
+    Raises:
+        HyptrbAPIError: If API request fails
+    """
+    try:
+        url = f"{HYPTRB_BASE_URL}influencer/get/jobs/{influencer_uid}"
+        params = {'page': page}
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 404:
+            return {
+                'influencer_uid': influencer_uid,
+                'totalJobs': 0,
+                'totalPages': 0,
+                'currentPage': page,
+                'jobs': []
+            }
+        
+        if response.status_code != 200:
+            raise HyptrbAPIError(f"Failed to fetch influencer jobs: {response.status_code}")
+        
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise HyptrbAPIError(f"Network error fetching influencer jobs: {str(e)}")

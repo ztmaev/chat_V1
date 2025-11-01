@@ -8,6 +8,7 @@ from db import get_db
 import json
 from firebase_auth import initialize_firebase, require_auth, optional_auth, get_current_user
 from hyptrb_api import (
+    fetch_influencer_jobs,
     fetch_user_role, 
     fetch_user_profile_by_role, 
     extract_display_name,
@@ -1099,6 +1100,57 @@ def test_auth():
     })
 
 # ============================================================================
+
+# ============================================================================
+# INFLUENCER JOBS ENDPOINTS (Protected)
+# ============================================================================
+
+@app.route('/influencer/jobs/<influencer_uid>', methods=['GET'])
+@require_auth
+def get_influencer_jobs(influencer_uid):
+    """
+    Get jobs/campaigns for an influencer
+    
+    Query Parameters:
+    - page: Page number for pagination (default: 1)
+    
+    Returns:
+    - influencer_uid: Influencer's UID
+    - totalJobs: Total number of jobs
+    - totalPages: Total number of pages
+    - currentPage: Current page number
+    - jobs: List of job objects with campaign details, status, rates, postLinks, etc.
+    """
+    user = get_current_user()
+    
+    # Verify user is authorized to view this influencer's jobs
+    # Either the user is the influencer themselves or an admin
+    db_user = ensure_user_exists(user)
+    user_role = db_user.get('role', 'client')
+    
+    if user_role != 'admin' and user['uid'] != influencer_uid:
+        return jsonify({'error': 'Unauthorized to view these jobs'}), 403
+    
+    # Get page parameter
+    page = request.args.get('page', 1, type=int)
+    
+    try:
+        # Fetch jobs from Hyptrb API
+        jobs_data = fetch_influencer_jobs(influencer_uid, page=page)
+        
+        return jsonify(jobs_data), 200
+        
+    except HyptrbAPIError as e:
+        return jsonify({
+            'error': 'Failed to fetch influencer jobs',
+            'details': str(e)
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
 # USER MANAGEMENT ENDPOINTS (Protected)
 # ============================================================================
 
