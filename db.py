@@ -403,6 +403,13 @@ class MessagingDatabase:
                     # Thread already exists, return existing ID
                     return existing['id']
             
+            # Check if a thread with this ID already exists (important when using campaign_id as thread_id)
+            cursor = conn.execute('SELECT id FROM threads WHERE id = ?', (thread_id,))
+            existing_by_id = cursor.fetchone()
+            if existing_by_id:
+                # Thread with this ID already exists, return it
+                return existing_by_id['id']
+            
             # Create new thread
             conn.execute('''
                 INSERT INTO threads (id, title, description, campaign_id, created_by, status)
@@ -419,15 +426,22 @@ class MessagingDatabase:
             return thread_id
         except sqlite3.IntegrityError as e:
             # Handle UNIQUE constraint error (for databases with the constraint)
-            if 'UNIQUE constraint failed' in str(e) and campaign_id and created_by:
-                # Fetch existing thread
-                cursor = conn.execute('''
-                    SELECT id FROM threads 
-                    WHERE campaign_id = ? AND created_by = ?
-                ''', (campaign_id, created_by))
-                existing = cursor.fetchone()
-                if existing:
-                    return existing['id']
+            if 'UNIQUE constraint failed' in str(e):
+                if 'threads.id' in str(e):
+                    # Thread with this ID already exists, fetch and return it
+                    cursor = conn.execute('SELECT id FROM threads WHERE id = ?', (thread_id,))
+                    existing = cursor.fetchone()
+                    if existing:
+                        return existing['id']
+                elif campaign_id and created_by:
+                    # Fetch existing thread by campaign_id + created_by
+                    cursor = conn.execute('''
+                        SELECT id FROM threads 
+                        WHERE campaign_id = ? AND created_by = ?
+                    ''', (campaign_id, created_by))
+                    existing = cursor.fetchone()
+                    if existing:
+                        return existing['id']
             raise
         finally:
             conn.close()
