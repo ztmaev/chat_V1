@@ -1,6 +1,8 @@
-# InfluencerConnect Chat API
+# HypTrb Chat API
 
-**Secure, thread-based messaging API with Firebase authentication**
+**Thread-based messaging API with Firebase authentication for the HypTrb influencer marketing platform**
+
+> ⚠️ **Status:** Functional with known issues. See [Known Issues & Recommendations](#-known-issues--recommendations) section.
 
 ## 🚀 Quick Start
 
@@ -45,16 +47,19 @@ The API will be available at `http://localhost:5001`
 - [API Endpoints](#api-endpoints)
 - [Database Structure](#database-structure)
 - [Development](#development)
+- [Known Issues & Recommendations](#️-known-issues--recommendations)
+- [Troubleshooting](#-troubleshooting)
 
 ## 🎯 Overview
 
-This is a production-ready messaging API for the InfluencerConnect platform. It provides:
+A messaging API for the HypTrb platform that enables communication between clients, influencers, and admins. It provides:
 
 - **Thread-based conversations** - Organize messages by campaign/topic
 - **Firebase authentication** - Secure access with Firebase ID tokens
 - **File attachments** - Images, videos, documents with metadata
 - **SQLite database** - Persistent storage with triggers and indexes
 - **RESTful API** - Clean, documented endpoints
+- **HypTrb API integration** - Auto-sync with campaigns and user profiles
 
 ## ✨ Features
 
@@ -85,7 +90,7 @@ This is a production-ready messaging API for the InfluencerConnect platform. It 
 - ✅ Video dimension extraction (OpenCV)
 - ✅ File size tracking
 - ✅ Type detection (image/video/file)
-- ✅ Secure file serving
+- ⚠️ File serving (all file types currently allowed - see security notes)
 
 ### Database
 - ✅ SQLite with proper schema
@@ -297,7 +302,7 @@ When a user accesses the API for the first time (or if their role is missing), t
 1. **Fetches user role** from Hyptrb API: `GET https://api.hyptrb.africa/roles/{email}`
 2. **Fetches profile data** based on role:
    - **Client**: `GET https://api.hyptrb.africa/clients/get/{email}` → Uses `businessName`
-   - **Admin**: `GET https://api.hyptrb.africa/admin/profile/{email}` → Uses `name`
+   - **Admin** (main_admin, billing_admin, campaign_admin): `GET https://api.hyptrb.africa/admin/profile/{email}` → Uses `name`
    - **Influencer**: `GET https://api.hyptrb.africa/influencer/get/profile/{uid}` → Uses `full_name`, `profile_picture_url`
 3. **Updates database** with enriched profile information (display_name, role, photo_url, phone_number)
 4. **Fetches campaigns** and auto-creates threads (for clients and influencers only):
@@ -386,7 +391,7 @@ python3 test_hyptrb_integration.py
 - Each campaign from Hyptrb gets its own thread
 - **Clients**: One thread per campaign they created
 - **Influencers**: One thread per campaign they're collaborating on
-- **Admins**: No automatic threads (development UI only)
+- **Admins** (main_admin, billing_admin, campaign_admin): No automatic threads (can join campaigns via API)
 - Thread creation is idempotent (won't create duplicates)
 - **Always up-to-date**: New campaigns in Hyptrb automatically appear as threads
 
@@ -421,7 +426,7 @@ python3 test_hyptrb_integration.py
 #### POST /messages/campaigns/{campaign_id}/join
 **Join a campaign thread as an admin**
 
-- ⚠️ **Requires admin role** (`role='admin'` in database)
+- ⚠️ **Requires admin role** (`role='main_admin'`, `'billing_admin'`, or `'campaign_admin'` in database)
 - **Purpose**: Allows admins to join any campaign thread for support/monitoring
 - **Request Body**: None (campaign ID in URL path)
 - **Authentication**: Firebase token in Authorization header
@@ -433,7 +438,7 @@ python3 test_hyptrb_integration.py
 - Returns thread and conversation details for immediate messaging
 
 **Security:**
-- Only users with `role='admin'` can access
+- Only users with admin roles (`main_admin`, `billing_admin`, or `campaign_admin`) can access
 - Admins cannot join their own campaigns
 - Validates campaign thread exists
 
@@ -460,7 +465,7 @@ python3 test_hyptrb_integration.py
 #### POST /messages/admin/chat/{user_firebase_uid}
 **Start a direct chat with any user as an admin**
 
-- ⚠️ **Requires admin role** (`role='admin'` in database)
+- ⚠️ **Requires admin role** (`role='main_admin'`, `'billing_admin'`, or `'campaign_admin'` in database)
 - **Purpose**: Start a direct support chat with any user by their Firebase UID
 - **Request Body**: None (user Firebase UID in URL path)
 - **Authentication**: Firebase token in Authorization header
@@ -473,7 +478,7 @@ python3 test_hyptrb_integration.py
 - Idempotent - returns existing chat if already started
 
 **Security:**
-- Only users with `role='admin'` can access
+- Only users with admin roles (`main_admin`, `billing_admin`, or `campaign_admin`) can access
 - Admins cannot chat with themselves
 - Validates target user exists
 
@@ -498,7 +503,7 @@ python3 test_hyptrb_integration.py
 ```
 
 **Error Responses:**
-- `403 Forbidden` - User is not an admin
+- `403 Forbidden` - User is not an admin (must have main_admin, billing_admin, or campaign_admin role)
 - `404 Not Found` - Target user not found
 - `400 Bad Request` - Trying to chat with yourself
 
@@ -779,6 +784,136 @@ curl -H "Authorization: Bearer <user-b-token>" \
 - ✅ Set proper file permissions (600 for keys)
 - ✅ Audit access control logs for 403 errors
 
+## ⚠️ Known Issues & Recommendations
+
+### 🔴 Critical Issues
+
+#### 1. File Upload Security
+**Issue:** All file types are currently allowed (`ALLOWED_EXTENSIONS = None`), including executables.
+```python
+# Current: app.py line 52
+ALLOWED_EXTENSIONS = None  # Allow all file types
+```
+**Risk:** Malicious file uploads, potential code execution
+**Recommendation:**
+```python
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'mov', 'webm'}
+```
+
+#### 2. No Rate Limiting
+**Issue:** No rate limiting on any endpoint
+**Risk:** DoS attacks, brute force attempts, resource exhaustion
+**Recommendation:** Implement Flask-Limiter
+```python
+from flask_limiter import Limiter
+limiter = Limiter(app, key_func=lambda: request.headers.get('Authorization'))
+```
+
+#### 3. Inefficient Thread Sync
+**Issue:** `GET /messages/threads` fetches ALL campaigns from HypTrb API on every request
+**Impact:** Slow response times, unnecessary API calls, poor performance
+**Current behavior:**
+- Every thread list request triggers full campaign sync
+- For influencers, fetches all pages of jobs
+- Caught by UNIQUE constraint (inefficient)
+
+**Recommendation:** Move to background job (Celery) or add caching with TTL
+
+#### 4. Missing Message Pagination
+**Issue:** `GET /messages/threads/<thread_id>/conversations/<conversation_id>` loads ALL messages
+**Impact:** Slow for long conversations, high memory usage
+**Recommendation:** Add pagination with limit/offset parameters
+
+### 🟡 High Priority Issues
+
+#### 5. Unread Count Not Incremented
+**Issue:** Database triggers update `last_message` but don't increment `unread_count`
+**Impact:** Unread counts remain at 0
+**Recommendation:** Add trigger to increment unread_count on message insert
+
+#### 6. No Input Validation
+**Issue:** No validation for:
+- Thread titles/descriptions length
+- Message content length
+- Email format
+- User-provided names
+
+**Recommendation:** Add Pydantic models or marshmallow schemas
+
+#### 7. Authentication Tokens Logged
+**Issue:** Tokens logged to console in `firebase_auth.py:73`
+```python
+print(f"   Token preview: {id_token[:50]}...")
+```
+**Risk:** Token exposure if logs are compromised
+**Recommendation:** Remove token logging, log only metadata
+
+#### 8. No Database Connection Pooling
+**Issue:** New SQLite connection created for every operation
+**Impact:** Inefficient under load, potential "too many connections" errors
+**Recommendation:** Use connection pooling or migrate to PostgreSQL for production
+
+### 🟠 Medium Priority Issues
+
+#### 9. No CSRF Protection
+**Issue:** Admin routes use session-based auth without CSRF tokens
+**Recommendation:** Add Flask-WTF CSRF protection
+
+#### 10. Hardcoded Configuration
+**Issue:** `HYPTRB_BASE_URL` hardcoded in `hyptrb_api.py`
+**Recommendation:** Move to environment variable
+
+#### 11. No API Versioning
+**Issue:** No version prefix (e.g., `/api/v1/`)
+**Impact:** Breaking changes will affect all clients
+**Recommendation:** Add version prefix to all routes
+
+#### 12. Missing Request Timeout Retry Logic
+**Issue:** HypTrb API calls have 10s timeout but no retry logic
+**Recommendation:** Add exponential backoff and circuit breaker pattern
+
+### 📊 Performance Improvements
+
+#### 13. N+1 Query Problem
+**Location:** Thread enrichment loops fetch last message for each conversation separately
+**Recommendation:** Use JOIN or bulk fetch
+
+#### 14. No Caching Layer
+**Missing cache for:**
+- User profiles (fetched from HypTrb on every request)
+- Thread lists
+- Campaign data
+
+**Recommendation:** Implement Redis with TTL
+
+#### 15. Duplicate Code
+**Issue:** Conversation enrichment logic duplicated in multiple endpoints
+**Recommendation:** Extract to helper function
+
+### 🔒 Security Recommendations
+
+- [ ] Add Content-Security-Policy headers
+- [ ] Add X-Frame-Options header
+- [ ] Enforce HTTPS in production
+- [ ] Sanitize user input for XSS
+- [ ] Implement audit logging for admin actions
+- [ ] Add 2FA for admin authentication
+- [ ] Implement account lockout after failed login attempts
+- [ ] Use bcrypt for password hashing (if storing passwords)
+- [ ] Never expose stack traces to clients in production
+- [ ] Add request ID tracking for debugging
+
+### 📈 Scalability Recommendations
+
+- [ ] Migrate from SQLite to PostgreSQL for production
+- [ ] Implement database migrations (Alembic)
+- [ ] Add message delivery status tracking (sent → delivered → read)
+- [ ] Implement WebSocket support for real-time updates
+- [ ] Add background job processing (Celery)
+- [ ] Implement proper logging system (not print statements)
+- [ ] Add error tracking (Sentry or similar)
+- [ ] Generate OpenAPI/Swagger documentation
+
 ## 🚨 Troubleshooting
 
 ### Firebase Not Initializing
@@ -877,7 +1012,7 @@ If you have an existing unsecured version:
 
 ## 📄 License
 
-Part of the InfluencerConnect project.
+Part of the HypTrb platform.
 
 ## 🆘 Support
 
@@ -887,17 +1022,52 @@ For issues or questions:
 3. Check server logs for detailed errors
 4. Test with `/auth/test` endpoint
 
-## 🎯 Next Steps
+## 🎯 Recommended Next Steps
 
-After setup:
+### Immediate Priorities (Critical)
+1. 🔴 **Restrict file uploads** - Add whitelist of allowed file extensions
+2. 🔴 **Add rate limiting** - Prevent abuse and DoS attacks
+3. 🔴 **Optimize thread sync** - Move to background job or add caching
+4. 🔴 **Add message pagination** - Prevent loading thousands of messages
 
-1. ✅ **Frontend Integration** - Update API calls to include Firebase tokens
-2. ✅ **User Association** - Link threads/conversations to Firebase users
-3. ✅ **Role-Based Access** - Implement client/influencer permissions
-4. ✅ **Production Deployment** - Deploy with proper security
-5. ✅ **Monitoring** - Add logging and analytics
+### High Priority
+5. 🟡 **Fix unread count** - Add trigger to increment on new messages
+6. 🟡 **Add input validation** - Validate all user inputs
+7. 🟡 **Remove token logging** - Security risk in production
+8. 🟡 **Add connection pooling** - Or migrate to PostgreSQL
+
+### Medium Priority
+9. 🟠 **Add CSRF protection** - For admin routes
+10. 🟠 **Implement caching** - Redis for user profiles and threads
+11. 🟠 **Add API versioning** - Prepare for breaking changes
+12. 🟠 **Proper error logging** - Replace print statements with logging module
 
 ## 📝 Version History
+
+### Current Status (November 2025)
+**Status:** Functional with known issues
+
+**What Works:**
+- ✅ Firebase authentication and authorization
+- ✅ Thread creation from HypTrb campaigns
+- ✅ Conversations and messaging
+- ✅ File uploads with metadata
+- ✅ Admin dashboard and management
+- ✅ User profile sync with HypTrb API
+- ✅ Access control (users see only their data)
+
+**Known Issues:**
+- ⚠️ All file types allowed (security risk)
+- ⚠️ No rate limiting (DoS vulnerability)
+- ⚠️ Thread sync on every request (performance issue)
+- ⚠️ No message pagination (scalability issue)
+- ⚠️ Unread count not incremented
+- ⚠️ No input validation
+- ⚠️ SQLite for production (not recommended)
+
+See [Known Issues & Recommendations](#️-known-issues--recommendations) for full details.
+
+---
 
 ### Version 2.5.0 - Optional Participant2 & Join Endpoint (2025-10-12)
 **Flexible Conversation Model**

@@ -61,17 +61,25 @@ def verify_firebase_token(id_token):
     Raises:
         Exception: If token is invalid or expired
     """
+    if not _firebase_initialized:
+        raise Exception("Firebase Admin SDK not initialized. Check service account credentials.")
+    
     try:
         # Verify the ID token
         decoded_token = auth.verify_id_token(id_token)
         return decoded_token
-    except auth.InvalidIdTokenError:
-        raise Exception("Invalid Firebase ID token")
+    except auth.InvalidIdTokenError as e:
+        print(f"❌ Invalid Firebase ID token: {str(e)}")
+        print(f"   Token preview: {id_token[:50]}..." if len(id_token) > 50 else f"   Token: {id_token}")
+        raise Exception("Invalid Firebase ID token. Token may be from wrong Firebase project or malformed.")
     except auth.ExpiredIdTokenError:
-        raise Exception("Firebase ID token has expired")
+        print("❌ Firebase ID token has expired")
+        raise Exception("Firebase ID token has expired. Please refresh your session.")
     except auth.RevokedIdTokenError:
+        print("❌ Firebase ID token has been revoked")
         raise Exception("Firebase ID token has been revoked")
     except Exception as e:
+        print(f"❌ Token verification failed: {str(e)}")
         raise Exception(f"Token verification failed: {str(e)}")
 
 def get_token_from_request():
@@ -188,6 +196,18 @@ def get_current_user():
     """
     return getattr(request, 'user', None)
 
+def is_admin_role(role):
+    """
+    Check if a role is any type of admin role
+    
+    Args:
+        role: Role string to check
+        
+    Returns:
+        bool: True if role is main_admin, billing_admin, or campaign_admin
+    """
+    return role in ['main_admin', 'billing_admin', 'campaign_admin']
+
 def require_role(required_role):
     """
     Decorator to require specific user role
@@ -196,7 +216,14 @@ def require_role(required_role):
     Usage:
         @app.route('/admin')
         @require_auth
-        @require_role('admin')
+        @require_role('main_admin')
+        def admin_route():
+            return jsonify({'message': 'Admin access'})
+        
+        # Or to accept any admin role:
+        @app.route('/admin')
+        @require_auth
+        @require_role(['main_admin', 'billing_admin', 'campaign_admin'])
         def admin_route():
             return jsonify({'message': 'Admin access'})
     """
@@ -214,10 +241,13 @@ def require_role(required_role):
             # Check role from custom claims
             user_role = user.get('role') or user.get('custom_claims', {}).get('role')
             
-            if user_role != required_role:
+            # Support both single role and list of roles
+            allowed_roles = required_role if isinstance(required_role, list) else [required_role]
+            
+            if user_role not in allowed_roles:
                 return jsonify({
                     'error': 'Forbidden',
-                    'message': f'This endpoint requires {required_role} role'
+                    'message': f'This endpoint requires one of these roles: {", ".join(allowed_roles)}'
                 }), 403
             
             return f(*args, **kwargs)

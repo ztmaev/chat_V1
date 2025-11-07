@@ -6,7 +6,7 @@ import time
 from werkzeug.utils import secure_filename
 from db import get_db
 import json
-from firebase_auth import initialize_firebase, require_auth, optional_auth, get_current_user
+from firebase_auth import initialize_firebase, require_auth, optional_auth, get_current_user, is_admin_role
 from hyptrb_api import (
     fetch_influencer_jobs,
     fetch_user_role, 
@@ -68,6 +68,9 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
     """
     Sync user's threads with their Hyptrb campaigns.
     Creates missing threads for any campaigns not yet tracked.
+    
+    For redundancy, thread IDs are set to the campaign_id, making them
+    predictable and directly tied to campaigns.
     
     Args:
         firebase_uid: User's Firebase UID
@@ -184,6 +187,11 @@ def ensure_user_exists(user_info: dict) -> dict:
     
     email = user_info.get('email')
     
+    # Clean email - remove any .admin suffix that might be appended by Firebase
+    if email and email.endswith('.admin'):
+        email = email[:-6]  # Remove the last 6 characters (.admin)
+        print(f"🔧 Cleaned email from {user_info.get('email')} to {email}")
+    
     # Check if user already exists in database
     existing_user = db.get_user_by_firebase_uid(firebase_uid)
     
@@ -200,31 +208,38 @@ def ensure_user_exists(user_info: dict) -> dict:
                 role_data = fetch_user_role(email)
                 if role_data:
                     role = role_data.get('role')
-                    
-                    # Step 2: Fetch profile based on role
-                    if role:
-                        try:
-                            # For influencer, we need the influencer_uid
-                            influencer_uid = firebase_uid if role == 'influencer' else None
-                            profile_data = fetch_user_profile_by_role(email, role, influencer_uid)
+                else:
+                    # If Hyptrb API doesn't return a role, check if this is a known admin email
+                    # This is a fallback for admin users who might not be in the Hyptrb system
+                    admin_emails = ['superadmin@hyptrb.africa', 'admin@hyptrb.africa']
+                    if email in admin_emails:
+                        role = 'main_admin'
+                        print(f"✅ Assigned main_admin role to known admin email: {email}")
+                
+                # Step 2: Fetch profile based on role
+                if role:
+                    try:
+                        # For influencer, we need the influencer_uid
+                        influencer_uid = firebase_uid if role == 'influencer' else None
+                        profile_data = fetch_user_profile_by_role(email, role, influencer_uid)
+                        
+                        if profile_data:
+                            # Step 3: Extract display name from profile
+                            display_name = extract_display_name(profile_data, role)
                             
-                            if profile_data:
-                                # Step 3: Extract display name from profile
-                                display_name = extract_display_name(profile_data, role)
-                                
-                                # Extract additional info based on role
-                                if role == 'influencer':
-                                    photo_url = profile_data.get('profile_picture_url') or photo_url
-                                    phone_number = profile_data.get('contact_phone') or phone_number
-                                elif role == 'client':
-                                    # Clients might not have profile pictures in the API
-                                    pass
-                                elif role == 'admin':
-                                    photo_url = profile_data.get('photo_url') or photo_url
-                                    phone_number = profile_data.get('phone_number') or phone_number
-                        except HyptrbAPIError as e:
-                            print(f"⚠️  Warning: Failed to fetch profile for {email}: {e}")
-                            # Continue with basic info even if profile fetch fails
+                            # Extract additional info based on role
+                            if role == 'influencer':
+                                photo_url = profile_data.get('profile_picture_url') or photo_url
+                                phone_number = profile_data.get('contact_phone') or phone_number
+                            elif role == 'client':
+                                # Clients might not have profile pictures in the API
+                                pass
+                            elif is_admin_role(role):
+                                photo_url = profile_data.get('photo_url') or photo_url
+                                phone_number = profile_data.get('phone_number') or phone_number
+                    except HyptrbAPIError as e:
+                        print(f"⚠️  Warning: Failed to fetch profile for {email}: {e}")
+                        # Continue with basic info even if profile fetch fails
         except HyptrbAPIError as e:
             print(f"⚠️  Warning: Failed to fetch role for {email}: {e}")
             # Continue with basic info even if role fetch fails
@@ -447,13 +462,17 @@ def handle_threads():
         else:
             print(f"⏭️  Skipping thread sync - Role: {user_role}, Email: {user_email}")
         
-        # Get threads where user is creator OR participant in any conversation
-        user_threads = db.get_threads_for_user(user_id)
+        # Get threads based on user role (admins see all threads with messages)
+        user_threads = db.get_threads_for_user(user_id, user_role)
         
         # Enrich each thread with conversation data
         for thread in user_threads:
             thread_id = thread['id']
-            conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
+            # Admins see all conversations, others see only their own
+            if is_admin_role(user_role):
+                conversations = db.get_conversations_by_thread(thread_id, user_id=None)
+            else:
+                conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
             
             # Add conversation count
             thread['conversation_count'] = len(conversations)
@@ -542,14 +561,20 @@ def get_thread(thread_id):
     if not db.thread_exists(thread_id):
         return jsonify({'error': 'Thread not found'}), 404
     
-    # Verify user has access to thread (creator or participant)
-    if not db.user_has_thread_access(thread_id, user_id):
+    # Verify user has access to thread (admins have access to all threads)
+    db_user = ensure_user_exists(user)
+    user_role = db_user.get('role')
+    
+    if not db.user_has_thread_access(thread_id, user_id, user_role):
         return jsonify({'error': 'Access denied. You do not have access to this thread'}), 403
     
     thread = db.get_thread_by_id(thread_id)
     
-    # Only return conversations where the user is a participant
-    conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
+    # Admins see all conversations, others see only their own
+    if is_admin_role(user_role):
+        conversations = db.get_conversations_by_thread(thread_id, user_id=None)
+    else:
+        conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
     
     return jsonify({
         'thread': thread,
@@ -578,12 +603,18 @@ def handle_thread_conversations(thread_id):
     thread = db.get_thread_by_id(thread_id)
     
     if request.method == 'GET':
-        # Verify user has access to thread (creator or participant)
-        if not db.user_has_thread_access(thread_id, user_id):
+        # Verify user has access to thread (admins have access to all threads)
+        db_user = ensure_user_exists(user)
+        user_role = db_user.get('role')
+        
+        if not db.user_has_thread_access(thread_id, user_id, user_role):
             return jsonify({'error': 'Access denied. You do not have access to this thread'}), 403
         
-        # Only return conversations where the user is a participant
-        conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
+        # Admins see all conversations, others see only their own
+        if is_admin_role(user_role):
+            conversations = db.get_conversations_by_thread(thread_id, user_id=None)
+        else:
+            conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
         return jsonify({
             'thread_id': thread_id,
             'conversations': conversations,
@@ -591,24 +622,40 @@ def handle_thread_conversations(thread_id):
         })
     
     if request.method == 'POST':
-        # For POST, verify user is the thread owner (only owner can create conversations)
-        if thread.get('created_by') != user_id:
-            return jsonify({'error': 'Access denied. Only the thread owner can create conversations'}), 403
+        # Get user info to check if admin
+        db_user = ensure_user_exists(user)
+        user_role = db_user.get('role')
+        
+        # For POST, verify user is the thread owner OR an admin
+        # Admins can create conversations in any thread to facilitate support
+        if thread.get('created_by') != user_id and not is_admin_role(user_role):
+            return jsonify({'error': 'Access denied. Only the thread owner or admins can create conversations'}), 403
         
         data = request.get_json()
         if not data:
             data = {}  # Allow empty body for creating conversation with only owner
         
-        # Thread owner is the authenticated user
-        thread_owner_id = user_id
-        
         # Determine the other participant (optional)
         # Accept either 'other_participant_id' or 'participant2_id' for backwards compatibility
         other_participant_id = data.get('other_participant_id') or data.get('participant2_id')
         
-        # Thread owner is always participant1
-        participant1_id = thread_owner_id
-        participant2_id = other_participant_id  # Can be None
+        # Determine participants based on who is creating the conversation
+        # If admin is creating in someone else's thread, thread owner is participant1
+        # Otherwise, the authenticated user is participant1
+        thread_owner_id = thread.get('created_by')
+        
+        if is_admin_role(user_role) and thread_owner_id != user_id:
+            # Admin creating conversation in someone else's thread
+            # participant1 = thread owner (client/influencer)
+            # participant2 = other_participant_id OR admin (if no other participant specified)
+            participant1_id = thread_owner_id
+            participant2_id = other_participant_id if other_participant_id else user_id
+        else:
+            # Thread owner creating conversation in their own thread
+            # participant1 = thread owner (authenticated user)
+            # participant2 = other_participant_id (can be None)
+            participant1_id = user_id
+            participant2_id = other_participant_id
         
         # Fetch participant1 info from database
         participant1_user = db.get_user_by_firebase_uid(participant1_id)
@@ -616,9 +663,11 @@ def handle_thread_conversations(thread_id):
         if not participant1_user:
             return jsonify({'error': 'Thread owner not found in database'}), 404
         
-        # Use database info for participant1 (thread owner)
+        # Use database info for participant1
         participant1_avatar = participant1_user.get('photo_url', '')
-        participant1_name = participant1_user.get('display_name', 'Thread Owner')
+        # Prefer provided name (e.g., business name) over database display_name
+        # This allows admin to set meaningful names when creating conversations
+        participant1_name = data.get('participant1_name') or participant1_user.get('display_name', 'Thread Owner')
         
         # Fetch participant2 info if specified
         participant2_user = None
@@ -626,10 +675,21 @@ def handle_thread_conversations(thread_id):
         participant2_name = None
         
         if participant2_id:
+            # Try to get user by Firebase UID first
             participant2_user = db.get_user_by_firebase_uid(participant2_id)
+            
+            # If not found and looks like an email, try to get by email
+            if not participant2_user and '@' in participant2_id:
+                participant2_user = db.get_user_by_email(participant2_id)
+                # Update participant2_id to the actual Firebase UID
+                if participant2_user:
+                    participant2_id = participant2_user.get('firebase_uid')
+            
             if participant2_user:
                 participant2_avatar = participant2_user.get('photo_url', '')
-                participant2_name = participant2_user.get('display_name', 'Participant')
+                # Prefer provided name (e.g., business name) over database display_name
+                # This allows admin to set meaningful names like "Nike Kenya" instead of personal names
+                participant2_name = data.get('participant2_name') or participant2_user.get('display_name', 'Participant')
             else:
                 # Fallback to provided values if user doesn't exist yet
                 participant2_avatar = data.get('participant2_avatar', '')
@@ -738,7 +798,7 @@ def join_campaign(campaign_id):
     
     # Check if user is an admin
     user_role = db_user.get('role')
-    if user_role != 'admin':
+    if not is_admin_role(user_role):
         return jsonify({
             'error': 'Access denied. Only admins can join campaigns',
             'user_role': user_role
@@ -810,7 +870,7 @@ def admin_start_chat(user_firebase_uid):
     
     # Check if user is an admin
     admin_role = db_user.get('role')
-    if admin_role != 'admin':
+    if not is_admin_role(admin_role):
         return jsonify({
             'error': 'Access denied. Only admins can start direct chats',
             'user_role': admin_role
@@ -899,10 +959,12 @@ def handle_conversation(thread_id, conversation_id):
     
     user = get_current_user()
     user_id = user['uid']
-    ensure_user_exists(user)
+    db_user = ensure_user_exists(user)
+    user_role = db_user.get('role')
     
-    # Verify user is a participant in this conversation
-    if conversation['participant1_id'] != user_id and conversation['participant2_id'] != user_id:
+    # Verify user is a participant in this conversation (admins have access to all conversations)
+    is_participant = (conversation['participant1_id'] == user_id or conversation['participant2_id'] == user_id)
+    if not is_participant and not is_admin_role(user_role):
         return jsonify({'error': 'Access denied. You are not a participant in this conversation'}), 403
     
     # GET: Retrieve messages
@@ -1053,7 +1115,8 @@ def handle_message(thread_id, conversation_id, message_id):
         return jsonify({'error': 'Message does not belong to this thread'}), 400
     
     user = get_current_user()
-    ensure_user_exists(user)
+    db_user = ensure_user_exists(user)
+    user_role = db_user.get('role')
     
     # GET: Retrieve message details
     if request.method == 'GET':
@@ -1061,13 +1124,14 @@ def handle_message(thread_id, conversation_id, message_id):
             'message': message
         })
     
-    # DELETE: Soft delete message (only sender can delete)
+    # DELETE: Soft delete message (sender or admin can delete)
     if request.method == 'DELETE':
         if message.get('deleted'):
             return jsonify({'message': 'Message already deleted'})
         
-        # Verify user is the sender
-        if message.get('sender_id') != user['uid']:
+        # Verify user is the sender or an admin
+        is_sender = message.get('sender_id') == user['uid']
+        if not is_sender and not is_admin_role(user_role):
             return jsonify({'error': 'You can only delete your own messages'}), 403
         
         success = db.delete_message(message_id)
@@ -1151,7 +1215,7 @@ def get_influencer_jobs(influencer_uid):
     db_user = ensure_user_exists(user)
     user_role = db_user.get('role', 'client')
     
-    if user_role != 'admin' and user['uid'] != influencer_uid:
+    if not is_admin_role(user_role) and user['uid'] != influencer_uid:
         return jsonify({'error': 'Unauthorized to view these jobs'}), 403
     
     # Get page parameter

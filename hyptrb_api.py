@@ -7,6 +7,21 @@ from typing import Optional, Dict
 
 HYPTRB_BASE_URL = "https://api.hyptrb.africa/"
 
+# Admin role types
+ADMIN_ROLES = ['main_admin', 'billing_admin', 'campaign_admin']
+
+def is_admin_role(role):
+    """
+    Check if a role is any type of admin role
+    
+    Args:
+        role: Role string to check
+        
+    Returns:
+        bool: True if role is main_admin, billing_admin, or campaign_admin
+    """
+    return role in ADMIN_ROLES
+
 class HyptrbAPIError(Exception):
     """Custom exception for Hyptrb API errors"""
     pass
@@ -129,7 +144,7 @@ def fetch_user_profile_by_role(email: str, role: str, influencer_uid: Optional[s
     
     Args:
         email: User's email address
-        role: User's role (client, admin, or influencer)
+        role: User's role (client, main_admin, billing_admin, campaign_admin, or influencer)
         influencer_uid: Required for influencer role
         
     Returns:
@@ -140,7 +155,7 @@ def fetch_user_profile_by_role(email: str, role: str, influencer_uid: Optional[s
     """
     if role == 'client':
         return fetch_client_profile(email)
-    elif role == 'admin':
+    elif is_admin_role(role):
         return fetch_admin_profile(email)
     elif role == 'influencer':
         if not influencer_uid:
@@ -162,7 +177,7 @@ def extract_display_name(profile: Dict, role: str) -> str:
     """
     if role == 'client':
         return profile.get('businessName', 'Unknown Client')
-    elif role == 'admin':
+    elif is_admin_role(role):
         return profile.get('name', profile.get('email', 'Unknown Admin'))
     elif role == 'influencer':
         return profile.get('full_name', 'Unknown Influencer')

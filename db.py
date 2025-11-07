@@ -318,23 +318,47 @@ class MessagingDatabase:
         finally:
             conn.close()
     
-    def get_threads_for_user(self, user_id: str) -> List[Dict]:
-        """Get threads where user is creator OR participant in any conversation"""
+    def get_threads_for_user(self, user_id: str, user_role: str = None) -> List[Dict]:
+        """
+        Get threads for user based on their role:
+        - Admins (main_admin, billing_admin, campaign_admin): See all threads with at least one message
+        - Others: See threads where they are creator OR participant in any conversation
+        """
         conn = self.get_connection()
         try:
-            cursor = conn.execute('''
-                SELECT DISTINCT t.*,
-                       COUNT(DISTINCT c.id) as conversation_count,
-                       SUM(c.unread_count) as total_unread
-                FROM threads t
-                LEFT JOIN conversations c ON t.id = c.thread_id
-                WHERE t.status = 'active'
-                  AND (t.created_by = ? 
-                       OR c.participant1_id = ? 
-                       OR c.participant2_id = ?)
-                GROUP BY t.id
-                ORDER BY t.updated_at DESC
-            ''', (user_id, user_id, user_id))
+            # Check if user is an admin
+            is_admin = user_role in ['main_admin', 'billing_admin', 'campaign_admin']
+            
+            if is_admin:
+                # Admins see all threads that have at least one message
+                cursor = conn.execute('''
+                    SELECT DISTINCT t.*,
+                           COUNT(DISTINCT c.id) as conversation_count,
+                           SUM(c.unread_count) as total_unread
+                    FROM threads t
+                    LEFT JOIN conversations c ON t.id = c.thread_id
+                    LEFT JOIN messages m ON t.id = m.thread_id AND m.deleted = FALSE
+                    WHERE t.status = 'active'
+                    GROUP BY t.id
+                    HAVING COUNT(m.id) > 0
+                    ORDER BY t.updated_at DESC
+                ''')
+            else:
+                # Non-admins see only their own threads
+                cursor = conn.execute('''
+                    SELECT DISTINCT t.*,
+                           COUNT(DISTINCT c.id) as conversation_count,
+                           SUM(c.unread_count) as total_unread
+                    FROM threads t
+                    LEFT JOIN conversations c ON t.id = c.thread_id
+                    WHERE t.status = 'active'
+                      AND (t.created_by = ? 
+                           OR c.participant1_id = ? 
+                           OR c.participant2_id = ?)
+                    GROUP BY t.id
+                    ORDER BY t.updated_at DESC
+                ''', (user_id, user_id, user_id))
+            
             return [dict(row) for row in cursor.fetchall()]
         finally:
             conn.close()
@@ -350,10 +374,21 @@ class MessagingDatabase:
             conn.close()
     
     def create_thread(self, thread_data: Dict) -> str:
-        """Create a new thread (idempotent - returns existing if campaign_id + created_by match)"""
-        thread_id = thread_data.get('id', f"t{uuid.uuid4().hex[:8]}")
+        """
+        Create a new thread (idempotent - returns existing if campaign_id + created_by match)
+        
+        For redundancy, when campaign_id is provided, it is used as the thread_id.
+        This ensures thread IDs are predictable and tied directly to campaigns.
+        """
         campaign_id = thread_data.get('campaign_id')
         created_by = thread_data.get('created_by', '')
+        
+        # Use campaign_id as thread_id for redundancy when available
+        # Otherwise fall back to provided id or generate a new one
+        if campaign_id:
+            thread_id = campaign_id
+        else:
+            thread_id = thread_data.get('id', f"t{uuid.uuid4().hex[:8]}")
         
         conn = self.get_connection()
         try:
@@ -406,19 +441,32 @@ class MessagingDatabase:
         finally:
             conn.close()
     
-    def user_has_thread_access(self, thread_id: str, user_id: str) -> bool:
-        """Check if user has access to thread (creator or participant in any conversation)"""
+    def user_has_thread_access(self, thread_id: str, user_id: str, user_role: str = None) -> bool:
+        """
+        Check if user has access to thread:
+        - Admins: Have access to all threads
+        - Others: Access only if creator or participant in any conversation
+        """
         conn = self.get_connection()
         try:
-            cursor = conn.execute('''
-                SELECT 1 FROM threads t
-                LEFT JOIN conversations c ON t.id = c.thread_id
-                WHERE t.id = ?
-                  AND (t.created_by = ? 
-                       OR c.participant1_id = ? 
-                       OR c.participant2_id = ?)
-                LIMIT 1
-            ''', (thread_id, user_id, user_id, user_id))
+            # Check if user is an admin
+            is_admin = user_role in ['main_admin', 'billing_admin', 'campaign_admin']
+            
+            if is_admin:
+                # Admins have access to all threads
+                cursor = conn.execute('SELECT 1 FROM threads WHERE id = ? LIMIT 1', (thread_id,))
+            else:
+                # Non-admins need to be creator or participant
+                cursor = conn.execute('''
+                    SELECT 1 FROM threads t
+                    LEFT JOIN conversations c ON t.id = c.thread_id
+                    WHERE t.id = ?
+                      AND (t.created_by = ? 
+                           OR c.participant1_id = ? 
+                           OR c.participant2_id = ?)
+                    LIMIT 1
+                ''', (thread_id, user_id, user_id, user_id))
+            
             return cursor.fetchone() is not None
         finally:
             conn.close()
