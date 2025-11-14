@@ -25,10 +25,7 @@ instance/
 .webassets-cache
 
 # Database
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
+#*.db
 
 # Environment
 .env
