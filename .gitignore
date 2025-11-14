@@ -39,6 +39,7 @@ serviceAccountKey.json
 
 # Uploads
 uploads/
+Archive
 
 # IDE
 .vscode/
