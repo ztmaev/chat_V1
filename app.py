@@ -33,7 +33,15 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-CORS(app)
+# Configure CORS to explicitly allow DELETE method and handle preflight requests
+CORS(app, resources={
+    r"/messages/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # Track start time for uptime
 START_TIME = time.time()
@@ -703,6 +711,10 @@ def handle_thread_conversations(thread_id):
             if thread:
                 conversation_name = f"{thread.get('title', 'Campaign')} Discussion"
         
+        # Extract participant2_email and participant_type from request
+        participant2_email = data.get('participant2_email') or data.get('participant_email')
+        participant_type = data.get('participant_type')
+        
         # Get or create conversation (with optional participant2)
         conversation_id = db.get_or_create_conversation(
             thread_id=thread_id,
@@ -712,6 +724,8 @@ def handle_thread_conversations(thread_id):
             participant2_name=participant2_name,
             participant1_avatar=participant1_avatar,
             participant2_avatar=participant2_avatar,
+            participant2_email=participant2_email,
+            participant_type=participant_type,
             name=conversation_name
         )
         
