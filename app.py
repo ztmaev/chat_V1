@@ -481,9 +481,12 @@ def handle_threads():
                 conversations = db.get_conversations_by_thread(thread_id, user_id=None)
             else:
                 conversations = db.get_conversations_by_thread(thread_id, user_id=user_id)
-            
+
             # Add conversation count
             thread['conversation_count'] = len(conversations)
+
+            # Calculate total unread count for this thread for the current user
+            thread['total_unread'] = db.get_thread_unread_count_for_user(thread_id, user_id)
             
             # Add simplified conversation list (only essential fields)
             enriched_conversations = []
@@ -491,18 +494,28 @@ def handle_threads():
                 # Get last message to determine type
                 last_msg = db.get_last_message(conv['id'])
                 last_message_type = determine_message_type(last_msg) if last_msg else 'text'
-                
+
+                # Get unread count specific to the current user
+                unread_count = db.get_unread_count_for_user(conv['id'], user_id)
+
                 enriched_conversations.append({
                     'id': conv['id'],
                     'name': conv.get('name'),
                     'participant1_id': conv.get('participant1_id'),
                     'participant1_name': conv.get('participant1_name'),
+                    'participant1_avatar': conv.get('participant1_avatar'),
+                    'participant1_email': conv.get('participant1_email'),
+                    'participant1_role': conv.get('participant1_role'),
                     'participant2_id': conv.get('participant2_id'),
                     'participant2_name': conv.get('participant2_name'),
+                    'participant2_avatar': conv.get('participant2_avatar'),
+                    'participant2_email': conv.get('participant2_email'),
+                    'participant2_role': conv.get('participant2_role'),
+                    'participant_type': conv.get('participant_type'),
                     'last_message': conv.get('last_message'),
                     'last_message_time': conv.get('last_message_time'),
                     'last_message_type': last_message_type,
-                    'unread_count': conv.get('unread_count', 0),
+                    'unread_count': unread_count,
                     'updated_at': conv.get('updated_at')
                 })
             
@@ -536,18 +549,28 @@ def handle_threads():
             # Get last message to determine type
             last_msg = db.get_last_message(conv['id'])
             last_message_type = determine_message_type(last_msg) if last_msg else 'text'
-            
+
+            # Get unread count specific to the current user
+            unread_count = db.get_unread_count_for_user(conv['id'], user_id)
+
             enriched_conversations.append({
                 'id': conv['id'],
                 'name': conv.get('name'),
                 'participant1_id': conv.get('participant1_id'),
                 'participant1_name': conv.get('participant1_name'),
+                'participant1_avatar': conv.get('participant1_avatar'),
+                'participant1_email': conv.get('participant1_email'),
+                'participant1_role': conv.get('participant1_role'),
                 'participant2_id': conv.get('participant2_id'),
                 'participant2_name': conv.get('participant2_name'),
+                'participant2_avatar': conv.get('participant2_avatar'),
+                'participant2_email': conv.get('participant2_email'),
+                'participant2_role': conv.get('participant2_role'),
+                'participant_type': conv.get('participant_type'),
                 'last_message': conv.get('last_message'),
                 'last_message_time': conv.get('last_message_time'),
                 'last_message_type': last_message_type,
-                'unread_count': conv.get('unread_count', 0),
+                'unread_count': unread_count,
                 'updated_at': conv.get('updated_at')
             })
         
@@ -992,24 +1015,22 @@ def handle_conversation(thread_id, conversation_id):
     
     # PUT: Mark as read
     if request.method == 'PUT':
-        result = db.update_conversation_read_status_detailed(conversation_id)
-        
+        # Use new per-user read status tracking
+        result = db.mark_messages_as_read(conversation_id, user_id)
+
         if result['success']:
             response = {
                 'message': result['message'],
-                'updated': result['updated'],
-                'reason': result['reason']
+                'reason': result['reason'],
+                'marked_count': result['marked_count']
             }
-            
-            if result['updated'] and 'cleared_unread_count' in result:
-                response['cleared_unread_count'] = result['cleared_unread_count']
-            
+
             return jsonify(response)
         else:
             return jsonify({
                 'error': result['message'],
                 'reason': result['reason']
-            }), 404
+            }), 500
     
     # POST: Send message
     if request.method == 'POST':
