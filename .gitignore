@@ -28,11 +28,11 @@ instance/
 #*.db
 
 # Environment
-.env
+#.env
 .chat_env
 
 # Firebase
-serviceAccountKey.json
+#serviceAccountKey.json
 
 # Uploads
 uploads/
