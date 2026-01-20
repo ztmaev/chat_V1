@@ -491,9 +491,22 @@ class MessagingDatabase:
                     return existing['id']
             
             # Check if a thread with this ID already exists (important when using campaign_id as thread_id)
-            cursor = conn.execute('SELECT id FROM threads WHERE id = ?', (thread_id,))
+            cursor = conn.execute('SELECT id, created_by FROM threads WHERE id = ?', (thread_id,))
             existing_by_id = cursor.fetchone()
             if existing_by_id:
+                # Thread exists. Check ownership.
+                existing_creator = existing_by_id['created_by']
+                
+                # If we are syncing a campaign thread (campaign_id is present)
+                # and the creator is different, we update the creator to the current user.
+                # This handles cases where:
+                # 1. User's Firebase UID changed (e.g. deleted and recreated account)
+                # 2. Thread was created by an admin or system but belongs to this client
+                if campaign_id and created_by and existing_creator != created_by:
+                    print(f"⚠️  Thread {thread_id} exists but owner mismatch. Updating owner from {existing_creator} to {created_by}")
+                    conn.execute('UPDATE threads SET created_by = ? WHERE id = ?', (created_by, thread_id))
+                    conn.commit()
+
                 # Thread with this ID already exists, return it
                 return existing_by_id['id']
             
