@@ -8,7 +8,6 @@ class MessagingDatabase:
     def __init__(self, db_path="messaging.db"):
         self.db_path = db_path
         self._create_tables()
-        self._migrate_schema()
         self._create_triggers()
         self._migrate_db()
     
@@ -187,36 +186,6 @@ class MessagingDatabase:
                 CREATE INDEX IF NOT EXISTS idx_message_read_status_message
                 ON message_read_status(message_id)
             ''')
-
-            conn.commit()
-        finally:
-            conn.close()
-
-    def _migrate_schema(self):
-        """Apply schema migrations for existing databases"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-
-            # Check if conversations table has required columns
-            cursor.execute("PRAGMA table_info(conversations)")
-            columns = [row[1] for row in cursor.fetchall()]
-
-            # Add participant2_email column if it doesn't exist
-            if 'participant2_email' not in columns:
-                print("Migrating database: Adding participant2_email column...")
-                cursor.execute('''
-                    ALTER TABLE conversations
-                    ADD COLUMN participant2_email TEXT
-                ''')
-
-            # Add participant_type column if it doesn't exist
-            if 'participant_type' not in columns:
-                print("Migrating database: Adding participant_type column...")
-                cursor.execute('''
-                    ALTER TABLE conversations
-                    ADD COLUMN participant_type TEXT
-                ''')
 
             conn.commit()
         finally:
