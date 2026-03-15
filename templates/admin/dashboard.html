@@ -485,6 +485,7 @@
                 API Docs
             </a>
             <form method="POST" action="{{ url_for('admin_blueprint.logout') }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="logout-btn">
                     <i class="fas fa-sign-out-alt"></i>
                     Logout

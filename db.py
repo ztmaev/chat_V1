@@ -9,6 +9,41 @@ class MessagingDatabase:
         self.db_path = db_path
         self._create_tables()
         self._create_triggers()
+        self._migrate_db()
+    
+    def _migrate_db(self):
+        """Run database migrations to add missing columns"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            # Check for is_forwarded in messages table
+            cursor.execute("PRAGMA table_info(messages)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            if 'is_forwarded' not in columns:
+                cursor.execute('ALTER TABLE messages ADD COLUMN is_forwarded BOOLEAN DEFAULT FALSE')
+                print("✅ Added is_forwarded column to messages table")
+                
+            if 'original_message_id' not in columns:
+                cursor.execute('ALTER TABLE messages ADD COLUMN original_message_id TEXT')
+                print("✅ Added original_message_id column to messages table")
+            
+            # Check for participant2_email in conversations table
+            cursor.execute("PRAGMA table_info(conversations)")
+            conv_columns = [col[1] for col in cursor.fetchall()]
+            
+            if 'participant2_email' not in conv_columns:
+                cursor.execute('ALTER TABLE conversations ADD COLUMN participant2_email TEXT')
+                print("✅ Added participant2_email column to conversations table")
+                
+            if 'participant_type' not in conv_columns:
+                cursor.execute('ALTER TABLE conversations ADD COLUMN participant_type TEXT')
+                print("✅ Added participant_type column to conversations table")
+                
+            conn.commit()
+        finally:
+            conn.close()
     
     def get_connection(self):
         """Get database connection with row factory"""
@@ -98,6 +133,8 @@ class MessagingDatabase:
                     status TEXT DEFAULT 'sent',
                     deleted BOOLEAN DEFAULT FALSE,
                     deleted_at TEXT,
+                    is_forwarded BOOLEAN DEFAULT FALSE,
+                    original_message_id TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
@@ -707,6 +744,8 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                message['is_forwarded'] = bool(message.get('is_forwarded', False))
+                message['original_message_id'] = message.get('original_message_id')
                 
                 # Parse attachments JSON if present
                 if message.get('attachments'):
@@ -737,6 +776,8 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                message['is_forwarded'] = bool(message.get('is_forwarded', False))
+                message['original_message_id'] = message.get('original_message_id')
                 
                 # Parse attachments JSON if present
                 if message.get('attachments'):
@@ -768,6 +809,8 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                message['is_forwarded'] = bool(message.get('is_forwarded', False))
+                message['original_message_id'] = message.get('original_message_id')
                 
                 # Parse attachments JSON if present
                 if message.get('attachments'):
@@ -797,8 +840,8 @@ class MessagingDatabase:
                 INSERT INTO messages 
                 (id, conversation_id, thread_id, sender_id, sender_type, sender_name, type, 
                  content, text_content, caption, filename, file_size, has_attachment, attachments,
-                 timestamp, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 timestamp, status, is_forwarded, original_message_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 message_id,
                 message_data['conversation_id'],
@@ -815,13 +858,49 @@ class MessagingDatabase:
                 message_data.get('has_attachment', False),
                 attachments_json,
                 message_data['timestamp'],
-                message_data.get('status', 'delivered')
+                message_data.get('status', 'delivered'),
+                message_data.get('is_forwarded', False),
+                message_data.get('original_message_id')
             ))
             conn.commit()
             return message_id
         finally:
             conn.close()
     
+    def forward_message(self, original_message_id: str, target_conversation_id: str, target_thread_id: str, sender_id: str, sender_name: str, sender_type: str) -> Optional[str]:
+        """Forward an existing message to another conversation"""
+        message = self.get_message_by_id(original_message_id)
+        if not message:
+            return None
+        
+        # Prepare data for the new forwarded message
+        new_message_id = f"m{uuid.uuid4().hex[:8]}"
+        timestamp = datetime.now().isoformat() + 'Z'
+        
+        # Reuse fields from original message but update sender and target
+        forward_data = {
+            'id': new_message_id,
+            'conversation_id': target_conversation_id,
+            'thread_id': target_thread_id,
+            'sender_id': sender_id,
+            'sender_name': sender_name,
+            'sender_type': sender_type,
+            'type': message['type'],
+            'content': message['content'],
+            'text_content': message.get('text_content'),
+            'caption': message.get('caption'),
+            'filename': message.get('filename'),
+            'file_size': message.get('file_size'),
+            'has_attachment': message.get('has_attachment', False),
+            'attachments': message.get('attachments'),
+            'timestamp': timestamp,
+            'status': 'sent',
+            'is_forwarded': True,
+            'original_message_id': original_message_id
+        }
+        
+        return self.create_message(forward_data)
+
     def get_message_by_id(self, message_id: str) -> Optional[Dict]:
         """Get message by ID"""
         conn = self.get_connection()
@@ -832,6 +911,8 @@ class MessagingDatabase:
                 message = dict(row)
                 message['deleted'] = bool(message['deleted'])
                 message['has_attachment'] = bool(message.get('has_attachment', False))
+                message['is_forwarded'] = bool(message.get('is_forwarded', False))
+                message['original_message_id'] = message.get('original_message_id')
                 
                 # Parse attachments JSON
                 if message.get('attachments'):

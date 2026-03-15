@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for
 from flask_cors import CORS
+from flask_wtf.csrf import CSRFProtect
 from datetime import datetime, timedelta
 import os
 import time
@@ -32,7 +33,17 @@ except ImportError:
     CV2_AVAILABLE = False
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Security: Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Security: Ensure secret key is set via environment in production
+app.secret_key = os.getenv('SECRET_KEY')
+if not app.secret_key and os.getenv('FLASK_ENV') == 'production':
+    raise RuntimeError("SECRET_KEY must be set in production environment")
+elif not app.secret_key:
+    app.secret_key = 'dev-secret-key-replace-in-production'
+
 # Configure CORS to explicitly allow DELETE method and handle preflight requests
 CORS(app, resources={
     r"/messages/*": {
@@ -57,8 +68,20 @@ except Exception as e:
 
 # File upload configuration
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
-ALLOWED_EXTENSIONS = None  # Allow all file types
-MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 104857600))  # Default: 100MB (100 * 1024 * 1024)
+# Allowed file types: Media (images/video/audio), Text, Docs, and Archives
+ALLOWED_EXTENSIONS = {
+    # Images
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'tiff',
+    # Video
+    'mp4', 'mov', 'avi', 'mkv', 'webm',
+    # Audio
+    'mp3', 'wav', 'm4a', 'ogg',
+    # Documents & Text
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'csv', 'md',
+    # Archives
+    'zip', 'rar', '7z', 'tar', 'gz'
+}
+MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 104857600))  # Default: 100MB
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
@@ -286,10 +309,10 @@ def ensure_user_exists(user_info: dict) -> dict:
     return db.get_user_by_firebase_uid(firebase_uid)
 
 def allowed_file(filename):
-    """Check if file extension is allowed (all files allowed if ALLOWED_EXTENSIONS is None)"""
-    if ALLOWED_EXTENSIONS is None:
-        return True  # Allow all file types
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """Check if file extension is allowed"""
+    if not filename or '.' not in filename:
+        return False
+    return filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_file_type(filename):
     """Determine file type based on extension"""
@@ -417,6 +440,7 @@ def determine_message_type(message: dict) -> str:
 # ============================================================================
 
 @app.route('/messages/threads', methods=['GET', 'POST'])
+@csrf.exempt
 @require_auth
 def handle_threads():
     """
@@ -595,6 +619,7 @@ def get_thread(thread_id):
 # ============================================================================
 
 @app.route('/messages/threads/<thread_id>/conversations', methods=['GET', 'POST'])
+@csrf.exempt
 @require_auth
 def handle_thread_conversations(thread_id):
     """
@@ -737,8 +762,9 @@ def handle_thread_conversations(thread_id):
         }), 201
 
 @app.route('/messages/threads/<thread_id>/conversations/<conversation_id>/join', methods=['POST'])
+@csrf.exempt
 @require_auth
-def join_conversation(thread_id, conversation_id):
+def handle_join_conversation(thread_id, conversation_id):
     """
     Join a conversation as participant2
     Only works if conversation has no participant2 yet
@@ -799,6 +825,7 @@ def join_conversation(thread_id, conversation_id):
     }), 200
 
 @app.route('/messages/campaigns/<campaign_id>/join', methods=['POST'])
+@csrf.exempt
 @require_auth
 def join_campaign(campaign_id):
     """
@@ -871,6 +898,7 @@ def join_campaign(campaign_id):
         conn.close()
 
 @app.route('/messages/admin/chat/<user_firebase_uid>', methods=['POST'])
+@csrf.exempt
 @require_auth
 def admin_start_chat(user_firebase_uid):
     """
@@ -953,6 +981,7 @@ def admin_start_chat(user_firebase_uid):
         }), 500
 
 @app.route('/messages/threads/<thread_id>/conversations/<conversation_id>', methods=['GET', 'POST', 'PUT'])
+@csrf.exempt
 @require_auth
 def handle_conversation(thread_id, conversation_id):
     """
@@ -1096,11 +1125,64 @@ def handle_conversation(thread_id, conversation_id):
                 'data': message
             }), 201
 
+@app.route('/messages/forward', methods=['POST'])
+@csrf.exempt
+@require_auth
+def forward_message():
+    """Forward a message to a target conversation"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    original_message_id = data.get('original_message_id')
+    target_conversation_id = data.get('target_conversation_id')
+    target_thread_id = data.get('target_thread_id')
+    
+    if not all([original_message_id, target_conversation_id, target_thread_id]):
+        return jsonify({'error': 'Missing required fields: original_message_id, target_conversation_id, target_thread_id'}), 400
+    
+    # Verify original message exists
+    original_message = db.get_message_by_id(original_message_id)
+    if not original_message:
+        return jsonify({'error': 'Original message not found'}), 404
+    
+    # Verify target thread and conversation exist
+    if not db.thread_exists(target_thread_id):
+        return jsonify({'error': 'Target thread not found'}), 404
+    if not db.conversation_exists(target_conversation_id):
+        return jsonify({'error': 'Target conversation not found'}), 404
+    
+    user = get_current_user()
+    sender_id = user['uid']
+    db_user = ensure_user_exists(user)
+    sender_name = db_user.get('display_name', user.get('name', user.get('email', 'User')))
+    sender_type = db_user.get('role', 'client')
+    
+    # Forward the message
+    new_message_id = db.forward_message(
+        original_message_id,
+        target_conversation_id,
+        target_thread_id,
+        sender_id,
+        sender_name,
+        sender_type
+    )
+    
+    if new_message_id:
+        new_message = db.get_message_by_id(new_message_id)
+        return jsonify({
+            'message': 'Message forwarded successfully',
+            'data': new_message
+        }), 201
+    else:
+        return jsonify({'error': 'Failed to forward message'}), 500
+
 # ============================================================================
 # MESSAGE ENDPOINTS (Protected)
 # ============================================================================
 
 @app.route('/messages/threads/<thread_id>/conversations/<conversation_id>/<message_id>', methods=['GET', 'DELETE'])
+@csrf.exempt
 @require_auth
 def handle_message(thread_id, conversation_id, message_id):
     """
@@ -1160,9 +1242,9 @@ def handle_message(thread_id, conversation_id, message_id):
 # ============================================================================
 
 @app.route('/uploads/<filename>', methods=['GET'])
-@optional_auth
+@require_auth
 def serve_file(filename):
-    """Serve uploaded files (files are uploaded as part of message sending)"""
+    """Serve uploaded files (Requires authentication)"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # ============================================================================
@@ -1183,6 +1265,7 @@ def health_check():
     })
 
 @app.route('/auth/test', methods=['GET'])
+@csrf.exempt
 @require_auth
 def test_auth():
     """Test authentication endpoint"""
@@ -1207,6 +1290,7 @@ def test_auth():
 # ============================================================================
 
 @app.route('/influencer/jobs/<influencer_uid>', methods=['GET'])
+@csrf.exempt
 @require_auth
 def get_influencer_jobs(influencer_uid):
     """
@@ -1256,6 +1340,7 @@ def get_influencer_jobs(influencer_uid):
 # ============================================================================
 
 @app.route('/users/me', methods=['GET', 'PUT'])
+@csrf.exempt
 @require_auth
 def handle_current_user():
     """
@@ -1296,6 +1381,7 @@ def handle_current_user():
         })
 
 @app.route('/users/<firebase_uid>', methods=['GET'])
+@csrf.exempt
 @require_auth
 def get_user(firebase_uid):
     """Get user by Firebase UID"""
@@ -1309,6 +1395,7 @@ def get_user(firebase_uid):
     })
 
 @app.route('/users', methods=['GET'])
+@csrf.exempt
 @require_auth
 def list_users():
     """List all users with pagination"""
@@ -1326,7 +1413,9 @@ def list_users():
 
 if __name__ == '__main__':
     # Load configuration from environment variables
-    debug_mode = os.getenv('FLASK_DEBUG', 'True').lower() in ('true', '1', 'yes')
+    # Default to False in production
+    is_prod = os.getenv('FLASK_ENV') == 'production'
+    debug_mode = os.getenv('FLASK_DEBUG', str(not is_prod)).lower() in ('true', '1', 'yes')
     api_host = os.getenv('API_HOST', '0.0.0.0')
     api_port = int(os.getenv('API_PORT', 5001))
     

@@ -70,7 +70,6 @@ def verify_firebase_token(id_token):
         return decoded_token
     except auth.InvalidIdTokenError as e:
         print(f"❌ Invalid Firebase ID token: {str(e)}")
-        print(f"   Token preview: {id_token[:50]}..." if len(id_token) > 50 else f"   Token: {id_token}")
         raise Exception("Invalid Firebase ID token. Token may be from wrong Firebase project or malformed.")
     except auth.ExpiredIdTokenError:
         print("❌ Firebase ID token has expired")
