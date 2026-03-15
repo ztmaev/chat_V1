@@ -3,9 +3,26 @@ Hyptrb API Integration Module
 Handles all interactions with the Hyptrb API for user profile fetching
 """
 import requests
+import os
+from urllib.parse import quote as _quote
 from typing import Optional, Dict
 
-HYPTRB_BASE_URL = "https://api.hyptrb.africa/"
+def quote(s):
+    """URL encode string, encoding slashes as well"""
+    if not isinstance(s, str):
+        return str(s)
+    return _quote(s, safe='')
+
+HYPTRB_BASE_URL = os.getenv('HYPTRB_API_BASE_URL', "https://hyptrb-service-mzr8k.ondigitalocean.app/")
+HYPTRB_INTERNAL_TOKEN = os.getenv('HYPTRB_INTERNAL_TOKEN')
+
+def _auth_headers():
+    headers = {
+        'Accept': 'application/json'
+    }
+    if HYPTRB_INTERNAL_TOKEN:
+        headers['Authorization'] = f"Bearer {HYPTRB_INTERNAL_TOKEN}"
+    return headers
 
 # Admin role types
 ADMIN_ROLES = ['main_admin', 'billing_admin', 'campaign_admin']
@@ -40,8 +57,8 @@ def fetch_user_role(email: str) -> Optional[Dict]:
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}roles/{email}"
-        response = requests.get(url, timeout=10)
+        url = f"{HYPTRB_BASE_URL}roles/{quote(email)}"
+        response = requests.get(url, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return None
@@ -67,8 +84,8 @@ def fetch_client_profile(email: str) -> Optional[Dict]:
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}clients/get/{email}"
-        response = requests.get(url, timeout=10)
+        url = f"{HYPTRB_BASE_URL}internal-endpoints/get/client-profile/{quote(email)}"
+        response = requests.get(url, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return None
@@ -94,8 +111,8 @@ def fetch_admin_profile(email: str) -> Optional[Dict]:
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}admin/profile/{email}"
-        response = requests.get(url, timeout=10)
+        url = f"{HYPTRB_BASE_URL}internal-endpoints/get/admin-profile/{quote(email)}"
+        response = requests.get(url, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return None
@@ -121,8 +138,8 @@ def fetch_influencer_profile(influencer_uid: str) -> Optional[Dict]:
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}influencer/get/profile/{influencer_uid}"
-        response = requests.get(url, timeout=10)
+        url = f"{HYPTRB_BASE_URL}internal-endpoints/get/influencer-profile/{quote(influencer_uid)}"
+        response = requests.get(url, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return None
@@ -198,8 +215,8 @@ def fetch_client_campaigns(client_email: str) -> list:
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}clients/get/all/campaigns/{client_email}"
-        response = requests.get(url, timeout=10)
+        url = f"{HYPTRB_BASE_URL}internal-endpoints/get-client/campaign/{quote(client_email)}"
+        response = requests.get(url, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return []
@@ -235,9 +252,9 @@ def fetch_influencer_collaborations(influencer_uid: str, page: int = 1, limit: i
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}influencer/get/clients/collaborations/{influencer_uid}"
+        url = f"{HYPTRB_BASE_URL}internal-endpoints/get/clients/collaborations/{quote(influencer_uid)}"
         params = {'page': page, 'limit': limit}
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return {'current_clients': [], 'past_clients': []}
@@ -269,9 +286,9 @@ def fetch_influencer_jobs(influencer_uid: str, page: int = 1) -> Dict:
         HyptrbAPIError: If API request fails
     """
     try:
-        url = f"{HYPTRB_BASE_URL}influencer/get/jobs/{influencer_uid}"
+        url = f"{HYPTRB_BASE_URL}internal-endpoints/get/influencer/jobs/{quote(influencer_uid)}"
         params = {'page': page}
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params, timeout=10, headers=_auth_headers())
         
         if response.status_code == 404:
             return {

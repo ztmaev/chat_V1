@@ -8,6 +8,7 @@ class MessagingDatabase:
     def __init__(self, db_path="messaging.db"):
         self.db_path = db_path
         self._create_tables()
+        self._migrate_schema()
         self._create_triggers()
         self._migrate_db()
     
@@ -141,6 +142,17 @@ class MessagingDatabase:
                     FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE
                 )
             ''')
+
+            # Message read status table - tracks which users have read which messages
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS message_read_status (
+                    message_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    read_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (message_id, user_id),
+                    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+                )
+            ''')
             
             # Create indexes
             cursor.execute('''
@@ -164,14 +176,52 @@ class MessagingDatabase:
                 ON messages(thread_id)
             ''')
             cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_messages_timestamp 
+                CREATE INDEX IF NOT EXISTS idx_messages_timestamp
                 ON messages(timestamp)
             ''')
-            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_message_read_status_user
+                ON message_read_status(user_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_message_read_status_message
+                ON message_read_status(message_id)
+            ''')
+
             conn.commit()
         finally:
             conn.close()
-    
+
+    def _migrate_schema(self):
+        """Apply schema migrations for existing databases"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # Check if conversations table has required columns
+            cursor.execute("PRAGMA table_info(conversations)")
+            columns = [row[1] for row in cursor.fetchall()]
+
+            # Add participant2_email column if it doesn't exist
+            if 'participant2_email' not in columns:
+                print("Migrating database: Adding participant2_email column...")
+                cursor.execute('''
+                    ALTER TABLE conversations
+                    ADD COLUMN participant2_email TEXT
+                ''')
+
+            # Add participant_type column if it doesn't exist
+            if 'participant_type' not in columns:
+                print("Migrating database: Adding participant_type column...")
+                cursor.execute('''
+                    ALTER TABLE conversations
+                    ADD COLUMN participant_type TEXT
+                ''')
+
+            conn.commit()
+        finally:
+            conn.close()
+
     def _create_triggers(self):
         conn = self.get_connection()
         try:
@@ -478,9 +528,22 @@ class MessagingDatabase:
                     return existing['id']
             
             # Check if a thread with this ID already exists (important when using campaign_id as thread_id)
-            cursor = conn.execute('SELECT id FROM threads WHERE id = ?', (thread_id,))
+            cursor = conn.execute('SELECT id, created_by FROM threads WHERE id = ?', (thread_id,))
             existing_by_id = cursor.fetchone()
             if existing_by_id:
+                # Thread exists. Check ownership.
+                existing_creator = existing_by_id['created_by']
+                
+                # If we are syncing a campaign thread (campaign_id is present)
+                # and the creator is different, we update the creator to the current user.
+                # This handles cases where:
+                # 1. User's Firebase UID changed (e.g. deleted and recreated account)
+                # 2. Thread was created by an admin or system but belongs to this client
+                if campaign_id and created_by and existing_creator != created_by:
+                    print(f"⚠️  Thread {thread_id} exists but owner mismatch. Updating owner from {existing_creator} to {created_by}")
+                    conn.execute('UPDATE threads SET created_by = ? WHERE id = ?', (created_by, thread_id))
+                    conn.commit()
+
                 # Thread with this ID already exists, return it
                 return existing_by_id['id']
             
@@ -579,7 +642,32 @@ class MessagingDatabase:
                     WHERE thread_id = ? AND status = 'active'
                     ORDER BY updated_at DESC
                 ''', (thread_id,))
-            return [dict(row) for row in cursor.fetchall()]
+            conversations = [dict(row) for row in cursor.fetchall()]
+
+            # Enrich with participant roles/emails for UI correctness.
+            # These fields are not stored on the conversation row, but are needed by the
+            # admin UI to correctly label participants (client vs influencer) especially
+            # for single-participant conversations created by a client.
+            for conv in conversations:
+                p1_id = conv.get('participant1_id')
+                p2_id = conv.get('participant2_id')
+
+                if p1_id:
+                    p1_user = self.get_user_by_firebase_uid(p1_id)
+                    if p1_user:
+                        conv['participant1_email'] = p1_user.get('email')
+                        conv['participant1_role'] = p1_user.get('role')
+
+                if p2_id:
+                    p2_user = self.get_user_by_firebase_uid(p2_id)
+                    if p2_user:
+                        conv['participant2_role'] = p2_user.get('role')
+                        # If participant2_email is missing but exists on user, expose it
+                        # (helps admin UI matching for portal users).
+                        if not conv.get('participant2_email') and p2_user.get('email'):
+                            conv['participant2_email'] = p2_user.get('email')
+
+            return conversations
         finally:
             conn.close()
     
@@ -589,7 +677,29 @@ class MessagingDatabase:
         try:
             cursor = conn.execute('SELECT * FROM conversations WHERE id = ?', (conversation_id,))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+
+            conv = dict(row)
+
+            # Enrich with participant roles/emails (see get_conversations_by_thread).
+            p1_id = conv.get('participant1_id')
+            p2_id = conv.get('participant2_id')
+
+            if p1_id:
+                p1_user = self.get_user_by_firebase_uid(p1_id)
+                if p1_user:
+                    conv['participant1_email'] = p1_user.get('email')
+                    conv['participant1_role'] = p1_user.get('role')
+
+            if p2_id:
+                p2_user = self.get_user_by_firebase_uid(p2_id)
+                if p2_user:
+                    conv['participant2_role'] = p2_user.get('role')
+                    if not conv.get('participant2_email') and p2_user.get('email'):
+                        conv['participant2_email'] = p2_user.get('email')
+
+            return conv
         finally:
             conn.close()
     
@@ -726,7 +836,91 @@ class MessagingDatabase:
                 }
         finally:
             conn.close()
-    
+
+    def get_unread_count_for_user(self, conversation_id: str, user_id: str) -> int:
+        """Get the number of unread messages for a specific user in a conversation"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute('''
+                SELECT COUNT(*) as unread_count
+                FROM messages m
+                WHERE m.conversation_id = ?
+                  AND m.sender_id != ?
+                  AND m.deleted = FALSE
+                  AND m.id NOT IN (
+                      SELECT message_id FROM message_read_status WHERE user_id = ?
+                  )
+            ''', (conversation_id, user_id, user_id))
+            row = cursor.fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
+
+    def get_thread_unread_count_for_user(self, thread_id: str, user_id: str) -> int:
+        """Get the total number of unread messages for a specific user in a thread"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute('''
+                SELECT COUNT(*) as unread_count
+                FROM messages m
+                INNER JOIN conversations c ON m.conversation_id = c.id
+                WHERE c.thread_id = ?
+                  AND m.sender_id != ?
+                  AND m.deleted = FALSE
+                  AND (c.participant1_id = ? OR c.participant2_id = ?)
+                  AND m.id NOT IN (
+                      SELECT message_id FROM message_read_status WHERE user_id = ?
+                  )
+            ''', (thread_id, user_id, user_id, user_id, user_id))
+            row = cursor.fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
+
+    def mark_messages_as_read(self, conversation_id: str, user_id: str) -> Dict:
+        """Mark all messages in a conversation as read for a specific user"""
+        conn = self.get_connection()
+        try:
+            # Get all unread messages for this user in the conversation
+            cursor = conn.execute('''
+                SELECT m.id
+                FROM messages m
+                WHERE m.conversation_id = ?
+                  AND m.sender_id != ?
+                  AND m.deleted = FALSE
+                  AND m.id NOT IN (
+                      SELECT message_id FROM message_read_status WHERE user_id = ?
+                  )
+            ''', (conversation_id, user_id, user_id))
+
+            unread_messages = [row[0] for row in cursor.fetchall()]
+
+            if not unread_messages:
+                return {
+                    'success': True,
+                    'reason': 'already_read',
+                    'message': 'All messages already read',
+                    'marked_count': 0
+                }
+
+            # Mark each message as read
+            for message_id in unread_messages:
+                conn.execute('''
+                    INSERT OR IGNORE INTO message_read_status (message_id, user_id)
+                    VALUES (?, ?)
+                ''', (message_id, user_id))
+
+            conn.commit()
+
+            return {
+                'success': True,
+                'reason': 'marked_as_read',
+                'message': f'{len(unread_messages)} messages marked as read',
+                'marked_count': len(unread_messages)
+            }
+        finally:
+            conn.close()
+
     # Message operations
     def get_messages(self, conversation_id: str) -> List[Dict]:
         """Get all messages for a conversation"""

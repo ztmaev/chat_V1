@@ -25,9 +25,9 @@ def migrate_database(db_path='messaging.db'):
                 ALTER TABLE conversations 
                 ADD COLUMN participant2_email TEXT
             ''')
-            print("✓ participant2_email column added")
+            print("participant2_email column added successfully")
         else:
-            print("✓ participant2_email column already exists")
+            print("participant2_email column already exists")
         
         # Add participant_type column if it doesn't exist
         if 'participant_type' not in columns:
@@ -36,9 +36,9 @@ def migrate_database(db_path='messaging.db'):
                 ALTER TABLE conversations 
                 ADD COLUMN participant_type TEXT
             ''')
-            print("✓ participant_type column added")
+            print("participant_type column added successfully")
         else:
-            print("✓ participant_type column already exists")
+            print("participant_type column already exists")
         
         conn.commit()
         print("\nMigration completed successfully!")

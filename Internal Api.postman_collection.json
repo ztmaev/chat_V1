@@ -1,0 +1,618 @@
+{
+	"info": {
+		"_postman_id": "96d6783f-1bf4-4070-971b-03eaeb1e6765",
+		"name": "Internal Api",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32597873",
+		"_collection_link": "https://traxx-technology-2965667.postman.co/workspace/HypeTribe~1d3955a7-b2fa-42d8-a6e1-0feae0825d8e/collection/47540506-96d6783f-1bf4-4070-971b-03eaeb1e6765?action=share&source=collection_link&creator=32597873"
+	},
+	"item": [
+		{
+			"name": "Messaging",
+			"item": [
+				{
+					"name": "Get Client Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}internal-endpoints/get/client-profile/{{client_email}}",
+							"host": [
+								"{{baseUrl}}internal-endpoints"
+							],
+							"path": [
+								"get",
+								"client-profile",
+								"{{client_email}}"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "200",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}internal-endpoints/get/client-profile/{{client_email}}",
+									"host": [
+										"{{baseUrl}}internal-endpoints"
+									],
+									"path": [
+										"get",
+										"client-profile",
+										"{{client_email}}"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": null,
+							"header": [
+								{
+									"key": "Date",
+									"value": "Mon, 12 Jan 2026 09:54:06 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Transfer-Encoding",
+									"value": "chunked"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Content-Encoding",
+									"value": "br"
+								},
+								{
+									"key": "access-control-allow-origin",
+									"value": "*"
+								},
+								{
+									"key": "access-control-allow-credentials",
+									"value": "true"
+								},
+								{
+									"key": "content-security-policy",
+									"value": "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"
+								},
+								{
+									"key": "cross-origin-opener-policy",
+									"value": "same-origin"
+								},
+								{
+									"key": "cross-origin-resource-policy",
+									"value": "same-origin"
+								},
+								{
+									"key": "origin-agent-cluster",
+									"value": "?1"
+								},
+								{
+									"key": "referrer-policy",
+									"value": "no-referrer"
+								},
+								{
+									"key": "strict-transport-security",
+									"value": "max-age=31536000; includeSubDomains"
+								},
+								{
+									"key": "x-content-type-options",
+									"value": "nosniff"
+								},
+								{
+									"key": "x-dns-prefetch-control",
+									"value": "off"
+								},
+								{
+									"key": "x-download-options",
+									"value": "noopen"
+								},
+								{
+									"key": "x-frame-options",
+									"value": "SAMEORIGIN"
+								},
+								{
+									"key": "x-permitted-cross-domain-policies",
+									"value": "none"
+								},
+								{
+									"key": "x-xss-protection",
+									"value": "0"
+								},
+								{
+									"key": "etag",
+									"value": "W/\"1d3-QmQaUFdb/t6mtrLmfSmLUlpzYrQ\""
+								},
+								{
+									"key": "x-do-app-origin",
+									"value": "8b605a72-f9f4-49b0-9946-d6b41492ae68"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "private"
+								},
+								{
+									"key": "x-do-orig-status",
+									"value": "200"
+								},
+								{
+									"key": "cf-cache-status",
+									"value": "MISS"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "__cf_bm=CY._Lh4aFSg5pWv.KFh8GmoDU4wjzVwVgYfqaOg3O_c-1768211646-1.0.1.1-gkWpvn9WljTTR_.v5Iy3SKMstdcahzFgGRG8ZHJhBkfln.zbHfLJq5.7rC8_acV1vURTZq7zrpwoEl2HeuUFTNVXzemN3XlhOSwKqqFJnmo; path=/; expires=Mon, 12-Jan-26 10:24:06 GMT; domain=.ondigitalocean.app; HttpOnly; Secure; SameSite=None"
+								},
+								{
+									"key": "Vary",
+									"value": "Accept-Encoding"
+								},
+								{
+									"key": "Server",
+									"value": "cloudflare"
+								},
+								{
+									"key": "CF-RAY",
+									"value": "9bcbc5408f39828a-IAD"
+								},
+								{
+									"key": "alt-svc",
+									"value": "h3=\":443\"; ma=86400"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"_id\": \"6963effa00e38abee1719ec7\",\n        \"client_email\": \"iannm254@gmail.com\",\n        \"businessName\": \"Ian NM\",\n        \"verificationStatus\": \"verification_required\",\n        \"rejectionReason\": \"\",\n        \"role\": \"client\",\n        \"accountStatus\": \"active\",\n        \"createdAt\": \"2026-01-11T18:46:18.938Z\",\n        \"updatedAt\": \"2026-01-11T20:54:36.892Z\",\n        \"__v\": 0,\n        \"businessMode\": \"product\",\n        \"description\": \"sssss\",\n        \"industry\": \"Health & Fitness\",\n        \"location\": \"🇰🇪\",\n        \"phone_no\": \"0798853808\",\n        \"websiteUrl\": \"https://Ianoo.com\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Admin Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}internal-endpoints/get/admin-profile/{{admin_email}}",
+							"host": [
+								"{{baseUrl}}internal-endpoints"
+							],
+							"path": [
+								"get",
+								"admin-profile",
+								"{{admin_email}}"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "200",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}internal-endpoints/get/admin-profile/{{admin_email}}",
+									"host": [
+										"{{baseUrl}}internal-endpoints"
+									],
+									"path": [
+										"get",
+										"admin-profile",
+										"{{admin_email}}"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": null,
+							"header": [
+								{
+									"key": "Date",
+									"value": "Mon, 12 Jan 2026 09:56:50 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Transfer-Encoding",
+									"value": "chunked"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Content-Encoding",
+									"value": "br"
+								},
+								{
+									"key": "access-control-allow-origin",
+									"value": "*"
+								},
+								{
+									"key": "access-control-allow-credentials",
+									"value": "true"
+								},
+								{
+									"key": "content-security-policy",
+									"value": "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"
+								},
+								{
+									"key": "cross-origin-opener-policy",
+									"value": "same-origin"
+								},
+								{
+									"key": "cross-origin-resource-policy",
+									"value": "same-origin"
+								},
+								{
+									"key": "origin-agent-cluster",
+									"value": "?1"
+								},
+								{
+									"key": "referrer-policy",
+									"value": "no-referrer"
+								},
+								{
+									"key": "strict-transport-security",
+									"value": "max-age=31536000; includeSubDomains"
+								},
+								{
+									"key": "x-content-type-options",
+									"value": "nosniff"
+								},
+								{
+									"key": "x-dns-prefetch-control",
+									"value": "off"
+								},
+								{
+									"key": "x-download-options",
+									"value": "noopen"
+								},
+								{
+									"key": "x-frame-options",
+									"value": "SAMEORIGIN"
+								},
+								{
+									"key": "x-permitted-cross-domain-policies",
+									"value": "none"
+								},
+								{
+									"key": "x-xss-protection",
+									"value": "0"
+								},
+								{
+									"key": "etag",
+									"value": "W/\"103-nYFYJGOXTzVNAN25FMHmQz87bRU\""
+								},
+								{
+									"key": "x-do-app-origin",
+									"value": "8b605a72-f9f4-49b0-9946-d6b41492ae68"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "private"
+								},
+								{
+									"key": "x-do-orig-status",
+									"value": "200"
+								},
+								{
+									"key": "cf-cache-status",
+									"value": "MISS"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "__cf_bm=TVnMPB1PEF8ysbGY.SYrqLfL0Nl8PKyBiC6U3rHgxj0-1768211810-1.0.1.1-3x74x.GJCTMPzTJZfOsmH8c09Tr_rM68YAnbkMuD1cJQefiWkLtcCc3i6MtE5Bdc8YXiX_rNl7KqVvK63jtdcbpL2NTdfVZJ.GtsWok.wek; path=/; expires=Mon, 12-Jan-26 10:26:50 GMT; domain=.ondigitalocean.app; HttpOnly; Secure; SameSite=None"
+								},
+								{
+									"key": "Vary",
+									"value": "Accept-Encoding"
+								},
+								{
+									"key": "Server",
+									"value": "cloudflare"
+								},
+								{
+									"key": "CF-RAY",
+									"value": "9bcbc9401eb22078-IAD"
+								},
+								{
+									"key": "alt-svc",
+									"value": "h3=\":443\"; ma=86400"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"_id\": \"6963805f2f353f5b9785562e\",\n    \"admin_email\": \"mainadmin@hyptrb.africa\",\n    \"role\": \"main_admin\",\n    \"phoneNumber\": \"0723432345\",\n    \"isVerified\": true,\n    \"resetCode\": null,\n    \"admin_uid\": null,\n    \"createdAt\": \"2026-01-11T10:50:08.225Z\",\n    \"updatedAt\": \"2026-01-11T10:50:08.225Z\",\n    \"__v\": 0\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Influencer Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}internal-endpoints/get/influencer-profile/{{influencer_uid}}",
+							"host": [
+								"{{baseUrl}}internal-endpoints"
+							],
+							"path": [
+								"get",
+								"influencer-profile",
+								"{{influencer_uid}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Client Campaigns",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}internal-endpoints/get-client/campaign/{{client_email}}",
+							"host": [
+								"{{baseUrl}}internal-endpoints"
+							],
+							"path": [
+								"get-client",
+								"campaign",
+								"{{client_email}}"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "200",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}internal-endpoints/get-client/campaign/{{client_email}}",
+									"host": [
+										"{{baseUrl}}internal-endpoints"
+									],
+									"path": [
+										"get-client",
+										"campaign",
+										"{{client_email}}"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": null,
+							"header": [
+								{
+									"key": "Date",
+									"value": "Mon, 12 Jan 2026 09:59:48 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Transfer-Encoding",
+									"value": "chunked"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Content-Encoding",
+									"value": "br"
+								},
+								{
+									"key": "access-control-allow-origin",
+									"value": "*"
+								},
+								{
+									"key": "access-control-allow-credentials",
+									"value": "true"
+								},
+								{
+									"key": "content-security-policy",
+									"value": "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"
+								},
+								{
+									"key": "cross-origin-opener-policy",
+									"value": "same-origin"
+								},
+								{
+									"key": "cross-origin-resource-policy",
+									"value": "same-origin"
+								},
+								{
+									"key": "origin-agent-cluster",
+									"value": "?1"
+								},
+								{
+									"key": "referrer-policy",
+									"value": "no-referrer"
+								},
+								{
+									"key": "strict-transport-security",
+									"value": "max-age=31536000; includeSubDomains"
+								},
+								{
+									"key": "x-content-type-options",
+									"value": "nosniff"
+								},
+								{
+									"key": "x-dns-prefetch-control",
+									"value": "off"
+								},
+								{
+									"key": "x-download-options",
+									"value": "noopen"
+								},
+								{
+									"key": "x-frame-options",
+									"value": "SAMEORIGIN"
+								},
+								{
+									"key": "x-permitted-cross-domain-policies",
+									"value": "none"
+								},
+								{
+									"key": "x-xss-protection",
+									"value": "0"
+								},
+								{
+									"key": "etag",
+									"value": "W/\"404-hHvsot7P4A9kN/TwKlozEAuKGUQ\""
+								},
+								{
+									"key": "x-do-app-origin",
+									"value": "8b605a72-f9f4-49b0-9946-d6b41492ae68"
+								},
+								{
+									"key": "Cache-Control",
+									"value": "private"
+								},
+								{
+									"key": "x-do-orig-status",
+									"value": "200"
+								},
+								{
+									"key": "CF-Cache-Status",
+									"value": "MISS"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "__cf_bm=jN7QSS4hsB4.eYhUPHoUABtmMKq2d9eUySkZUc0WkCg-1768211988-1.0.1.1-E6nE8d96UnrdbMSDjtET7xa86s0lAgiyEAD2VHeWhBbn_sbDXZnqggieOj1qsLkqn24YX0DQo1ghGMs9K3gJv2ko7USxhbO56_M4oy3wmbo; path=/; expires=Mon, 12-Jan-26 10:29:48 GMT; domain=.ondigitalocean.app; HttpOnly; Secure; SameSite=None"
+								},
+								{
+									"key": "Vary",
+									"value": "Accept-Encoding"
+								},
+								{
+									"key": "Server",
+									"value": "cloudflare"
+								},
+								{
+									"key": "CF-RAY",
+									"value": "9bcbcd9b99f8d6a5-IAD"
+								},
+								{
+									"key": "alt-svc",
+									"value": "h3=\":443\"; ma=86400"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"data\": [\n        {\n            \"_id\": \"6963f3bc896f01b7ab85b337\",\n            \"campaignName\": \"1111\",\n            \"budget\": 1111,\n            \"revenue\": 0,\n            \"client_email\": \"iannm254@gmail.com\",\n            \"status\": \"draft\",\n            \"paymentStatus\": \"pending\",\n            \"startDate\": \"2026-01-21T00:00:00.000Z\",\n            \"endDate\": \"2026-01-31T00:00:00.000Z\",\n            \"campaignDescription\": \"1111\",\n            \"mediaAvailable\": false,\n            \"mediaUrls\": [],\n            \"campaignGoal\": \"1111\",\n            \"campaignInstruction\": \"1111\",\n            \"targetLocation\": \"Kenya, 1111\",\n            \"numberOfInfluencers\": 1,\n            \"influencers\": [],\n            \"isCredit\": false,\n            \"creditApprovedBy\": null,\n            \"creditNotes\": null,\n            \"credit_lpo\": null,\n            \"createdBy\": \"client\",\n            \"cancelledByAdminEmail\": null,\n            \"cancellationReason\": null,\n            \"cancelledAt\": null,\n            \"minPrice\": null,\n            \"maxPrice\": null,\n            \"industrySpecializations\": [\n                \"fashion\",\n                \"business\",\n                \"music\",\n                \"history\"\n            ],\n            \"minFollowers\": 1111,\n            \"maxFollowers\": null,\n            \"gender\": null,\n            \"minAge\": 11,\n            \"maxAge\": null,\n            \"balance\": 1111,\n            \"platforms\": [\n                {\n                    \"name\": \"instagram\",\n                    \"no_posts\": 1,\n                    \"serviceTypes\": [\n                        \"static\"\n                    ],\n                    \"_id\": \"6963f3e2896f01b7ab85b33d\"\n                }\n            ],\n            \"createdAt\": \"2026-01-11T19:02:20.104Z\",\n            \"updatedAt\": \"2026-01-11T19:03:00.000Z\",\n            \"__v\": 1\n        }\n    ],\n    \"total\": 1,\n    \"page\": 1,\n    \"limit\": 20\n}"
+						}
+					]
+				},
+				{
+					"name": "Collaborations",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}internal-endpoints/get/clients/collaborations/{{influencer_uid}}",
+							"host": [
+								"{{baseUrl}}internal-endpoints"
+							],
+							"path": [
+								"get",
+								"clients",
+								"collaborations",
+								"{{influencer_uid}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Influencer Jobs",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}internal-endpoints/get/influencer/jobs/{{influencer_uid}}",
+							"host": [
+								"{{baseUrl}}internal-endpoints"
+							],
+							"path": [
+								"get",
+								"influencer",
+								"jobs",
+								"{{influencer_uid}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
