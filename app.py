@@ -51,6 +51,11 @@ CORS(app, resources={
         "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
+    },
+    r"/uploads/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
@@ -1263,10 +1268,30 @@ def handle_message(thread_id, conversation_id, message_id):
 # ============================================================================
 
 @app.route('/uploads/<filename>', methods=['GET'])
-@require_auth
 def serve_file(filename):
-    """Serve uploaded files (Requires authentication)"""
+    """Serve uploaded files (Publicly accessible)"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/uploads', methods=['POST'])
+@csrf.exempt
+@require_auth
+def upload_standalone_file():
+    """Standalone file upload endpoint (Requires authentication)"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    attachment = process_file_upload(file)
+    if not attachment:
+        return jsonify({'error': 'File upload failed or invalid file type'}), 400
+    
+    # Add upload time to match frontend interface if needed
+    attachment['upload_time'] = datetime.now().isoformat() + 'Z'
+    
+    return jsonify(attachment), 201
 
 # ============================================================================
 # HEALTH CHECK & STATUS PAGE (Public)
