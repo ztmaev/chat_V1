@@ -23,6 +23,9 @@ services:
       # Persist uploaded files
       - ./uploads:/app/uploads
       
+      # Persist logs
+      - ./logs:/app/logs
+      
       # Mount service account key if using file-based auth (development)
       - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     networks:

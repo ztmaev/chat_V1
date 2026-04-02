@@ -26,6 +26,7 @@ env/
 
 # Uploads (will be mounted as volume)
 uploads/
+logs/
 
 # Environment files
 .env
