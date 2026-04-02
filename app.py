@@ -4,6 +4,8 @@ from flask_wtf.csrf import CSRFProtect
 from datetime import datetime, timedelta
 import os
 import time
+import logging
+from logging.handlers import RotatingFileHandler
 from werkzeug.utils import secure_filename
 from db import get_db
 import json
@@ -31,6 +33,29 @@ try:
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False
+
+# Configure logging
+LOG_DIR = os.getenv('LOG_DIR', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+log_file = os.path.join(LOG_DIR, os.getenv('LOG_FILE', 'chat_api.log'))
+
+# Use RotatingFileHandler for log rotation
+# Max 5MB per file, keep 5 backup files
+log_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=5)
+log_handler.setFormatter(log_formatter)
+
+# Get the root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(os.getenv('LOG_LEVEL', 'WARNING'))
+root_logger.addHandler(log_handler)
+
+# Add a stream handler to also log to console (optional, for development)
+if os.getenv('FLASK_ENV') != 'production':
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(log_formatter)
+    root_logger.addHandler(stream_handler)
 
 app = Flask(__name__)
 
@@ -68,8 +93,8 @@ try:
     initialize_firebase()
     FIREBASE_INITIALIZED = True
 except Exception as e:
-    print(f"⚠️  Warning: Firebase initialization failed: {e}")
-    print("   API will continue but authentication will not work")
+    logging.error(f"⚠️  Firebase initialization failed: {e}")
+    logging.warning("API will continue but authentication will not work")
 
 # File upload configuration
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
@@ -125,7 +150,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
         if role == 'client':
             # Fetch client campaigns
             campaigns = fetch_client_campaigns(email)
-            print(f"🔄 Syncing {len(campaigns)} campaigns for client {email}")
+            logging.debug(f"Syncing {len(campaigns)} campaigns for client {email}")
             
             # Create thread for each campaign
             for campaign in campaigns:
@@ -143,9 +168,9 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                     try:
                         thread_id = db.create_thread(thread_data)
                         threads_created += 1
-                        print(f"  ✅ Thread synced: {thread_id} for campaign {campaign_name}")
+                        logging.debug(f"Thread synced: {thread_id} for campaign {campaign_name}")
                     except Exception as e:
-                        print(f"  ⚠️  Failed to create thread for campaign {campaign_name}: {e}")
+                        logging.error(f"Failed to create thread for campaign {campaign_name}: {e}")
         
         elif role == 'influencer':
             # Fetch influencer jobs/campaigns (fetch all pages)
@@ -158,7 +183,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
             total_pages = jobs_data.get('totalPages', 1)
             all_jobs.extend(jobs_data.get('jobs', []))
             
-            print(f"🔄 Syncing {total_jobs} jobs across {total_pages} pages for influencer {firebase_uid}")
+            logging.debug(f"Syncing {total_jobs} jobs across {total_pages} pages for influencer {firebase_uid}")
             
             # Fetch remaining pages if any
             for page in range(2, total_pages + 1):
@@ -166,7 +191,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                     jobs_data = fetch_influencer_jobs(firebase_uid, page=page)
                     all_jobs.extend(jobs_data.get('jobs', []))
                 except Exception as e:
-                    print(f"  ⚠️  Failed to fetch page {page}: {e}")
+                    logging.error(f"Failed to fetch page {page}: {e}")
             
             # Group jobs by campaign to avoid duplicate threads
             campaigns_dict = {}
@@ -181,7 +206,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                     if campaign_id and campaign_id not in campaigns_dict:
                         campaigns_dict[campaign_id] = campaign_name
             
-            print(f"  📊 Found {len(campaigns_dict)} unique campaigns from {len(all_jobs)} jobs")
+            logging.debug(f"Found {len(campaigns_dict)} unique campaigns from {len(all_jobs)} jobs")
             
             # Create thread for each unique campaign
             for campaign_id, campaign_name in campaigns_dict.items():
@@ -195,16 +220,16 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                 try:
                     thread_id = db.create_thread(thread_data)
                     threads_created += 1
-                    print(f"  ✅ Thread synced: {thread_id} for campaign {campaign_name}")
+                    logging.debug(f"Thread synced: {thread_id} for campaign {campaign_name}")
                 except Exception as e:
                     # Thread might already exist (UNIQUE constraint on campaign_id + created_by)
                     if 'UNIQUE constraint failed' not in str(e):
-                        print(f"  ⚠️  Failed to create thread for campaign {campaign_name}: {e}")
+                        logging.error(f"Failed to create thread for campaign {campaign_name}: {e}")
     
     except HyptrbAPIError as e:
-        print(f"⚠️  Warning: Failed to fetch campaigns for {email}: {e}")
+        logging.warning(f"Failed to fetch campaigns for {email}: {e}")
     except Exception as e:
-        print(f"⚠️  Warning: Error syncing threads for {email}: {e}")
+        logging.error(f"Error syncing threads for {email}: {e}")
     
     return threads_created
 
@@ -226,7 +251,7 @@ def ensure_user_exists(user_info: dict) -> dict:
     # Clean email - remove any .admin suffix that might be appended by Firebase
     if email and email.endswith('.admin'):
         email = email[:-6]  # Remove the last 6 characters (.admin)
-        print(f"🔧 Cleaned email from {user_info.get('email')} to {email}")
+        logging.debug(f"Cleaned email from {user_info.get('email')} to {email}")
     
     # Check if user already exists in database
     existing_user = db.get_user_by_firebase_uid(firebase_uid)
@@ -250,7 +275,7 @@ def ensure_user_exists(user_info: dict) -> dict:
                     admin_emails = ['superadmin@hyptrb.africa', 'admin@hyptrb.africa']
                     if email in admin_emails:
                         role = 'main_admin'
-                        print(f"✅ Assigned main_admin role to known admin email: {email}")
+                        logging.debug(f"Assigned main_admin role to known admin email: {email}")
                 
                 # Step 2: Fetch profile based on role
                 if role:
@@ -274,10 +299,10 @@ def ensure_user_exists(user_info: dict) -> dict:
                                 photo_url = profile_data.get('photo_url') or photo_url
                                 phone_number = profile_data.get('phone_number') or phone_number
                     except HyptrbAPIError as e:
-                        print(f"⚠️  Warning: Failed to fetch profile for {email}: {e}")
+                        logging.warning(f"Failed to fetch profile for {email}: {e}")
                         # Continue with basic info even if profile fetch fails
         except HyptrbAPIError as e:
-            print(f"⚠️  Warning: Failed to fetch role for {email}: {e}")
+            logging.warning(f"Failed to fetch role for {email}: {e}")
             # Continue with basic info even if role fetch fails
     
         # Create/update user with fetched information
@@ -293,7 +318,7 @@ def ensure_user_exists(user_info: dict) -> dict:
         
         # Auto-create threads for campaigns (only for clients and influencers)
         if role in ['client', 'influencer'] and email:
-            print(f"📋 Initial thread sync for new user {email}")
+            logging.debug(f"Initial thread sync for new user {email}")
             sync_user_campaign_threads(firebase_uid, email, role)
     
     else:
@@ -467,16 +492,16 @@ def handle_threads():
         user_role = db_user.get('role')
         user_email = db_user.get('email')
         
-        print(f"🔍 GET /messages/threads - User: {user_email}, Role: {user_role}")
+        logging.debug(f"GET /messages/threads - User: {user_email}, Role: {user_role}")
         
         # If user doesn't have role, try to fetch it from Hyptrb
         if not user_role and user_email:
-            print(f"⚠️  User {user_email} has no role, fetching from Hyptrb...")
+            logging.warning(f"User {user_email} has no role, fetching from Hyptrb...")
             try:
                 role_data = fetch_user_role(user_email)
                 if role_data:
                     user_role = role_data.get('role')
-                    print(f"✅ Fetched role: {user_role}")
+                    logging.debug(f"Fetched role: {user_role}")
                     # Update user with role
                     db.create_or_update_user({
                         'firebase_uid': user_id,
@@ -488,16 +513,16 @@ def handle_threads():
                         'email_verified': db_user.get('email_verified', False)
                     })
             except HyptrbAPIError as e:
-                print(f"❌ Failed to fetch role: {e}")
+                logging.error(f"Failed to fetch role: {e}")
         
         if user_role and user_email:
             threads_synced = sync_user_campaign_threads(user_id, user_email, user_role)
             if threads_synced > 0:
-                print(f"📊 Synced {threads_synced} new threads for {user_email}")
+                logging.debug(f"Synced {threads_synced} new threads for {user_email}")
             else:
-                print(f"✓ No new threads to sync for {user_email}")
+                logging.debug(f"No new threads to sync for {user_email}")
         else:
-            print(f"⏭️  Skipping thread sync - Role: {user_role}, Email: {user_email}")
+            logging.warning(f"Skipping thread sync - Role: {user_role}, Email: {user_email}")
         
         # Get threads based on user role (admins see all threads with messages)
         user_threads = db.get_threads_for_user(user_id, user_role)
@@ -550,7 +575,7 @@ def handle_threads():
             
             thread['conversations'] = enriched_conversations
         
-        print(f"📋 Returning {len(user_threads)} threads for {user_email}")
+        logging.debug(f"Returning {len(user_threads)} threads for {user_email}")
         
         return jsonify({
             'threads': user_threads,
