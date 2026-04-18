@@ -1,4 +1,5 @@
 import sqlite3
+from logger_config import logger
 from datetime import datetime
 from typing import List, Dict, Optional
 import uuid
@@ -23,11 +24,11 @@ class MessagingDatabase:
             
             if 'is_forwarded' not in columns:
                 cursor.execute('ALTER TABLE messages ADD COLUMN is_forwarded BOOLEAN DEFAULT FALSE')
-                print("✅ Added is_forwarded column to messages table")
+                logger.info("Added is_forwarded column to messages table")
                 
             if 'original_message_id' not in columns:
                 cursor.execute('ALTER TABLE messages ADD COLUMN original_message_id TEXT')
-                print("✅ Added original_message_id column to messages table")
+                logger.info("Added original_message_id column to messages table")
             
             # Check for participant2_email in conversations table
             cursor.execute("PRAGMA table_info(conversations)")
@@ -35,11 +36,11 @@ class MessagingDatabase:
             
             if 'participant2_email' not in conv_columns:
                 cursor.execute('ALTER TABLE conversations ADD COLUMN participant2_email TEXT')
-                print("✅ Added participant2_email column to conversations table")
+                logger.info("Added participant2_email column to conversations table")
                 
             if 'participant_type' not in conv_columns:
                 cursor.execute('ALTER TABLE conversations ADD COLUMN participant_type TEXT')
-                print("✅ Added participant_type column to conversations table")
+                logger.info("Added participant_type column to conversations table")
                 
             conn.commit()
         finally:
@@ -83,7 +84,7 @@ class MessagingDatabase:
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     status TEXT DEFAULT 'active',
-                    UNIQUE(campaign_id, created_by)
+                    UNIQUE(campaign_id)
                 )
             ''')
             
@@ -278,9 +279,9 @@ class MessagingDatabase:
             if not existing_user and email:
                 existing_user_by_email = self.get_user_by_email(email)
                 if existing_user_by_email:
-                    print(f"🔄 Found existing user by email {email} with different Firebase UID")
-                    print(f"   Old UID: {existing_user_by_email.get('firebase_uid')}, New UID: {firebase_uid}")
-                    print(f"   Updating record with new Firebase UID...")
+                    logger.info(f"Found existing user by email {email} with different Firebase UID")
+                    logger.info(f"Old UID: {existing_user_by_email.get('firebase_uid')}, New UID: {firebase_uid}")
+                    logger.info("Updating record with new Firebase UID...")
                     # Update the existing record with the new Firebase UID
                     conn.execute('''
                         UPDATE users
@@ -485,35 +486,45 @@ class MessagingDatabase:
         
         conn = self.get_connection()
         try:
-            # Check if thread already exists for this campaign_id and user
-            if campaign_id and created_by:
+            # Check if thread already exists for this campaign_id
+            if campaign_id:
                 cursor = conn.execute('''
-                    SELECT id FROM threads 
-                    WHERE campaign_id = ? AND created_by = ?
-                ''', (campaign_id, created_by))
+                    SELECT id, created_by FROM threads 
+                    WHERE campaign_id = ?
+                ''', (campaign_id,))
                 existing = cursor.fetchone()
                 if existing:
-                    # Thread already exists, return existing ID
+                    # Thread exists. Check if we need to update the owner.
+                    # This happens if it was created with a placeholder or by the wrong person.
+                    # We only update if the new created_by is NOT a placeholder, 
+                    # OR if the existing creator IS a placeholder.
+                    existing_creator = existing['created_by']
+                    if created_by and existing_creator != created_by:
+                        is_existing_placeholder = existing_creator.startswith('placeholder_')
+                        is_new_placeholder = created_by.startswith('placeholder_')
+                        
+                        if is_existing_placeholder and not is_new_placeholder:
+                            logger.info(f"Updating thread {existing['id']} owner from placeholder {existing_creator} to actual UID {created_by}")
+                            conn.execute('UPDATE threads SET created_by = ? WHERE id = ?', (created_by, existing['id']))
+                            conn.commit()
+                    
                     return existing['id']
             
             # Check if a thread with this ID already exists (important when using campaign_id as thread_id)
             cursor = conn.execute('SELECT id, created_by FROM threads WHERE id = ?', (thread_id,))
             existing_by_id = cursor.fetchone()
             if existing_by_id:
-                # Thread exists. Check ownership.
+                # Thread exists. Check ownership update as well.
                 existing_creator = existing_by_id['created_by']
-                
-                # If we are syncing a campaign thread (campaign_id is present)
-                # and the creator is different, we update the creator to the current user.
-                # This handles cases where:
-                # 1. User's Firebase UID changed (e.g. deleted and recreated account)
-                # 2. Thread was created by an admin or system but belongs to this client
-                if campaign_id and created_by and existing_creator != created_by:
-                    print(f"⚠️  Thread {thread_id} exists but owner mismatch. Updating owner from {existing_creator} to {created_by}")
-                    conn.execute('UPDATE threads SET created_by = ? WHERE id = ?', (created_by, thread_id))
-                    conn.commit()
+                if created_by and existing_creator != created_by:
+                    is_existing_placeholder = existing_creator.startswith('placeholder_')
+                    is_new_placeholder = created_by.startswith('placeholder_')
+                    
+                    if is_existing_placeholder and not is_new_placeholder:
+                        logger.info(f"Updating thread {thread_id} owner from placeholder {existing_creator} to actual UID {created_by}")
+                        conn.execute('UPDATE threads SET created_by = ? WHERE id = ?', (created_by, thread_id))
+                        conn.commit()
 
-                # Thread with this ID already exists, return it
                 return existing_by_id['id']
             
             # Create new thread
@@ -531,23 +542,18 @@ class MessagingDatabase:
             conn.commit()
             return thread_id
         except sqlite3.IntegrityError as e:
-            # Handle UNIQUE constraint error (for databases with the constraint)
+            # Handle UNIQUE constraint error
             if 'UNIQUE constraint failed' in str(e):
                 if 'threads.id' in str(e):
-                    # Thread with this ID already exists, fetch and return it
                     cursor = conn.execute('SELECT id FROM threads WHERE id = ?', (thread_id,))
-                    existing = cursor.fetchone()
-                    if existing:
-                        return existing['id']
-                elif campaign_id and created_by:
-                    # Fetch existing thread by campaign_id + created_by
-                    cursor = conn.execute('''
-                        SELECT id FROM threads 
-                        WHERE campaign_id = ? AND created_by = ?
-                    ''', (campaign_id, created_by))
-                    existing = cursor.fetchone()
-                    if existing:
-                        return existing['id']
+                elif 'threads.campaign_id' in str(e):
+                    cursor = conn.execute('SELECT id FROM threads WHERE campaign_id = ?', (campaign_id,))
+                else:
+                    return thread_id # Fallback
+                
+                existing = cursor.fetchone()
+                if existing:
+                    return existing['id']
             raise
         finally:
             conn.close()

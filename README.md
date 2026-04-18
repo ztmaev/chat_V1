@@ -389,16 +389,15 @@ python3 test_hyptrb_integration.py
 - Threads are **automatically created** when users first access the API
 - Threads are **automatically synced** every time `GET /messages/threads` is called
 - Each campaign from Hyptrb gets its own thread
-- **Clients**: One thread per campaign they created
-- **Influencers**: One thread per campaign they're collaborating on
+- **Standardized Ownership**: All campaign threads are owned by the campaign owner (client)
+- **Shared Access**: Clients and influencers share the same thread for a campaign
 - **Admins** (main_admin, billing_admin, campaign_admin): No automatic threads (can join campaigns via API)
 - Thread creation is idempotent (won't create duplicates)
 - **Always up-to-date**: New campaigns in Hyptrb automatically appear as threads
 
 **Thread Schema:**
 - Each thread is linked to a Hyptrb `campaign_id`
-- UNIQUE constraint: One thread per `(campaign_id, created_by)` combination
-- Clients and influencers get separate threads for the same campaign
+- UNIQUE constraint: One thread per `campaign_id`
 - Thread title: "Campaign: {campaign_name}"
 
 ### Conversations
@@ -640,9 +639,9 @@ curl -X POST \
 - Campaign-based message organization (auto-created from Hyptrb)
 - Fields: id, title, description, `campaign_id`, `created_by`, status, timestamps
 - **Campaign Link:** Each thread is linked to a Hyptrb campaign via `campaign_id`
-- **Ownership:** Each thread has one owner (the client or influencer)
-- **Uniqueness:** UNIQUE(campaign_id, created_by) - one thread per campaign per user
-- **Access Control:** Only thread owners can view and manage their threads
+- **Ownership:** Each thread has one owner (always the campaign owner/client)
+- **Uniqueness:** UNIQUE(campaign_id) - one thread per campaign across all users
+- **Access Control:** Thread owners and participating influencers/admins can access threads
 - **Automatic:** Created on first API access for clients and influencers
 
 **conversations**
@@ -1069,6 +1068,15 @@ See [Known Issues & Recommendations](#️-known-issues--recommendations) for ful
 
 ---
 
+### Version 2.6.0 - Uniform Thread Ownership (2026-04-18)
+**Standardized Campaign Ownership**
+- ✅ **Single Thread per Campaign**: Changed `UNIQUE(campaign_id, created_by)` to `UNIQUE(campaign_id)` in the threads table.
+- ✅ **Uniform Ownership**: The campaign owner (client) is now always the thread owner, regardless of who initializes the creation (client, influencer, or admin).
+- ✅ **Placeholder Owners**: If an influencer syncs a campaign before the client has logged in, a placeholder user is created for the client to maintain thread ownership.
+- ✅ **Auto-Conversation**: When an influencer syncs a campaign, a conversation is automatically created between the influencer and the client.
+- ✅ **Dynamic Owner Updates**: Thread ownership automatically transitions from placeholder UIDs to actual Firebase UIDs when the client first logs in.
+- ✅ **Access Control Update**: Influencers can now initiate conversations in campaign threads owned by clients.
+
 ### Version 2.5.0 - Optional Participant2 & Join Endpoint (2025-10-12)
 **Flexible Conversation Model**
 - ✅ `participant2` is now optional in conversations
@@ -1093,9 +1101,9 @@ See [Known Issues & Recommendations](#️-known-issues--recommendations) for ful
 - ✅ Old users get threads automatically synced when they call the endpoint
 - ✅ New campaigns in Hyptrb automatically appear as threads
 - ✅ Added `campaign_id` field to threads table
-- ✅ UNIQUE constraint on (campaign_id, created_by) - prevents duplicate threads
+- ✅ UNIQUE constraint on campaign_id - prevents duplicate threads
 - ✅ Client threads: Auto-created from all campaigns owned by client
-- ✅ Influencer threads: Auto-created from current collaborations
+- ✅ Influencer threads: Auto-created from collaborations (accessing client-owned thread)
 - ✅ Idempotent thread creation - safe to run multiple times
 - ✅ Removed manual thread creation endpoint (development UI only)
 - ✅ Thread title format: "Campaign: {campaign_name}"
@@ -1106,8 +1114,7 @@ See [Known Issues & Recommendations](#️-known-issues--recommendations) for ful
 - `GET /influencer/get/clients/collaborations/{uid}` - Fetch influencer collaborations
 
 **Campaign-Thread Mapping:**
-- One thread per campaign per user (clients and influencers get separate threads)
-- Threads are campaign-specific, not shared across users
+- One thread per campaign (shared between clients and influencers)
 - Thread lifecycle tied to Hyptrb campaign status
 - Always kept in sync with Hyptrb on thread listing
 

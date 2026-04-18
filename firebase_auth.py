@@ -4,6 +4,7 @@ Handles Firebase ID token verification for secure API access
 """
 
 import os
+from logger_config import logger
 import json
 from functools import wraps
 from flask import request, jsonify
@@ -27,7 +28,7 @@ def initialize_firebase():
         if os.path.exists(service_account_path):
             cred = credentials.Certificate(service_account_path)
             firebase_admin.initialize_app(cred)
-            print(f"✅ Firebase Admin initialized with service account: {service_account_path}")
+            logger.info(f"Firebase Admin initialized with service account: {service_account_path}")
         else:
             # Try to load from environment variable (JSON string)
             service_account_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
@@ -36,16 +37,16 @@ def initialize_firebase():
                 service_account_dict = json.loads(service_account_json)
                 cred = credentials.Certificate(service_account_dict)
                 firebase_admin.initialize_app(cred)
-                print("✅ Firebase Admin initialized with environment variable credentials")
+                logger.info("Firebase Admin initialized with environment variable credentials")
             else:
-                print("⚠️  WARNING: No Firebase credentials found. Authentication will fail.")
-                print("   Set FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_JSON")
+                logger.warning("No Firebase credentials found. Authentication will fail.")
+                logger.warning("Set FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_JSON")
                 return
         
         _firebase_initialized = True
         
     except Exception as e:
-        print(f"❌ Failed to initialize Firebase Admin: {str(e)}")
+        logger.error(f"Failed to initialize Firebase Admin: {str(e)}")
         raise
 
 def verify_firebase_token(id_token):
@@ -69,16 +70,16 @@ def verify_firebase_token(id_token):
         decoded_token = auth.verify_id_token(id_token)
         return decoded_token
     except auth.InvalidIdTokenError as e:
-        print(f"❌ Invalid Firebase ID token: {str(e)}")
+        logger.error(f"Invalid Firebase ID token: {str(e)}")
         raise Exception("Invalid Firebase ID token. Token may be from wrong Firebase project or malformed.")
     except auth.ExpiredIdTokenError:
-        print("❌ Firebase ID token has expired")
+        logger.error("Firebase ID token has expired")
         raise Exception("Firebase ID token has expired. Please refresh your session.")
     except auth.RevokedIdTokenError:
-        print("❌ Firebase ID token has been revoked")
+        logger.error("Firebase ID token has been revoked")
         raise Exception("Firebase ID token has been revoked")
     except Exception as e:
-        print(f"❌ Token verification failed: {str(e)}")
+        logger.error(f"Token verification failed: {str(e)}")
         raise Exception(f"Token verification failed: {str(e)}")
 
 def get_token_from_request():
@@ -144,7 +145,7 @@ def require_auth(f):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"❌ Authentication error: {error_details}")
+            logger.error(f"Authentication error: {error_details}")
             return jsonify({
                 'error': 'Authentication failed',
                 'message': str(e)

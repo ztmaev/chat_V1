@@ -20,6 +20,7 @@ from hyptrb_api import (
     HyptrbAPIError
 )
 from admin_blueprint import admin_blueprint
+from logger_config import logger
 
 # Try to import PIL and OpenCV for dimension extraction
 try:
@@ -93,8 +94,8 @@ try:
     initialize_firebase()
     FIREBASE_INITIALIZED = True
 except Exception as e:
-    logging.error(f"⚠️  Firebase initialization failed: {e}")
-    logging.warning("API will continue but authentication will not work")
+    logger.warning(f"Firebase initialization failed: {e}")
+    logger.warning("API will continue but authentication will not work")
 
 # File upload configuration
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
@@ -125,6 +126,58 @@ db = get_db()
 # Register admin blueprint
 app.register_blueprint(admin_blueprint)
 
+def get_campaign_owner_uid(campaign_id: str, client_email: str = None, default_uid: str = None) -> str:
+    """
+    Determine the owner (created_by) for a campaign thread.
+    The owner should always be the client/brand who owns the campaign.
+    
+    Args:
+        campaign_id: The campaign ID
+        client_email: Optional client email if known
+        default_uid: Fallback UID if owner cannot be determined
+        
+    Returns:
+        The UID of the campaign owner
+    """
+    if not campaign_id:
+        return default_uid
+    
+    # If this is an admin support thread, the user being supported is the "owner"
+    if campaign_id.startswith('admin_support_'):
+        user_uid = campaign_id.replace('admin_support_', '')
+        return user_uid
+    
+    # If we have client email, find or create their UID
+    if client_email:
+        client_user = db.get_user_by_email(client_email)
+        if client_user:
+            return client_user['firebase_uid']
+        else:
+            # Create a placeholder user for the client if they don't exist yet
+            placeholder_uid = f"placeholder_{client_email}"
+            try:
+                db.create_or_update_user({
+                    'firebase_uid': placeholder_uid,
+                    'email': client_email,
+                    'role': 'client',
+                    'display_name': client_email.split('@')[0]
+                })
+                return placeholder_uid
+            except Exception as e:
+                logger.warning(f"Failed to create placeholder user for {client_email}: {e}")
+    
+    # If thread already exists, use its owner
+    conn = db.get_connection()
+    try:
+        cursor = conn.execute('SELECT created_by FROM threads WHERE campaign_id = ?', (campaign_id,))
+        row = cursor.fetchone()
+        if row:
+            return row['created_by']
+    finally:
+        conn.close()
+        
+    return default_uid
+
 def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
     """
     Sync user's threads with their Hyptrb campaigns.
@@ -150,7 +203,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
         if role == 'client':
             # Fetch client campaigns
             campaigns = fetch_client_campaigns(email)
-            logging.debug(f"Syncing {len(campaigns)} campaigns for client {email}")
+            logger.debug(f"Syncing {len(campaigns)} campaigns for client {email}")
             
             # Create thread for each campaign
             for campaign in campaigns:
@@ -158,19 +211,22 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                 campaign_name = campaign.get('campaignName', 'Unnamed Campaign')
                 
                 if campaign_id:
+                    # Determine thread owner (always the client)
+                    thread_owner_uid = get_campaign_owner_uid(campaign_id, email, firebase_uid)
+                    
                     thread_data = {
                         'title': campaign_name,
                         'description': f"Messages for campaign {campaign_name}",
                         'campaign_id': campaign_id,
-                        'created_by': firebase_uid,
+                        'created_by': thread_owner_uid,
                         'status': 'active'
                     }
                     try:
                         thread_id = db.create_thread(thread_data)
                         threads_created += 1
-                        logging.debug(f"Thread synced: {thread_id} for campaign {campaign_name}")
+                        logger.debug(f"Thread synced: {thread_id} for campaign {campaign_name} (Owner: {thread_owner_uid})")
                     except Exception as e:
-                        logging.error(f"Failed to create thread for campaign {campaign_name}: {e}")
+                        logger.warning(f"Failed to create thread for campaign {campaign_name}: {e}")
         
         elif role == 'influencer':
             # Fetch influencer jobs/campaigns (fetch all pages)
@@ -183,7 +239,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
             total_pages = jobs_data.get('totalPages', 1)
             all_jobs.extend(jobs_data.get('jobs', []))
             
-            logging.debug(f"Syncing {total_jobs} jobs across {total_pages} pages for influencer {firebase_uid}")
+            logger.debug(f"Syncing {total_jobs} jobs across {total_pages} pages for influencer {firebase_uid}")
             
             # Fetch remaining pages if any
             for page in range(2, total_pages + 1):
@@ -191,7 +247,7 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                     jobs_data = fetch_influencer_jobs(firebase_uid, page=page)
                     all_jobs.extend(jobs_data.get('jobs', []))
                 except Exception as e:
-                    logging.error(f"Failed to fetch page {page}: {e}")
+                    logger.warning(f"Failed to fetch page {page}: {e}")
             
             # Group jobs by campaign to avoid duplicate threads
             campaigns_dict = {}
@@ -203,33 +259,69 @@ def sync_user_campaign_threads(firebase_uid: str, email: str, role: str) -> int:
                     campaign_id = campaign_detail.get('campaignId')
                     campaign_name = campaign_detail.get('campaignName', 'Unnamed Campaign')
                     
+                    # Extract client email if available
+                    client_email = campaign_detail.get('clientEmail') or job.get('clientEmail')
+                    
                     if campaign_id and campaign_id not in campaigns_dict:
-                        campaigns_dict[campaign_id] = campaign_name
+                        campaigns_dict[campaign_id] = {
+                            'name': campaign_name,
+                            'client_email': client_email
+                        }
             
-            logging.debug(f"Found {len(campaigns_dict)} unique campaigns from {len(all_jobs)} jobs")
+            logger.debug(f"Found {len(campaigns_dict)} unique campaigns from {len(all_jobs)} jobs")
             
             # Create thread for each unique campaign
-            for campaign_id, campaign_name in campaigns_dict.items():
+            for campaign_id, campaign_data in campaigns_dict.items():
+                campaign_name = campaign_data['name']
+                client_email = campaign_data['client_email']
+                
+                # Determine thread owner (always the client/campaign owner)
+                thread_owner_uid = get_campaign_owner_uid(campaign_id, client_email, firebase_uid)
+                
                 thread_data = {
                     'title': campaign_name,
                     'description': f"Messages for campaign {campaign_name}",
                     'campaign_id': campaign_id,
-                    'created_by': firebase_uid,
+                    'created_by': thread_owner_uid,
                     'status': 'active'
                 }
                 try:
                     thread_id = db.create_thread(thread_data)
                     threads_created += 1
-                    logging.debug(f"Thread synced: {thread_id} for campaign {campaign_name}")
+                    logger.debug(f"Thread synced: {thread_id} for campaign {campaign_name} (Owner: {thread_owner_uid})")
+                    
+                    # If an influencer is syncing a campaign, ensure they have a conversation 
+                    # with the campaign owner so they can see and access the thread.
+                    if role == 'influencer' and thread_owner_uid != firebase_uid:
+                        # Get influencer profile for conversation details
+                        influencer_user = db.get_user_by_firebase_uid(firebase_uid)
+                        influencer_name = influencer_user.get('display_name', 'Influencer') if influencer_user else 'Influencer'
+                        influencer_avatar = influencer_user.get('photo_url', '') if influencer_user else ''
+                        
+                        # Get client profile for conversation details
+                        client_user = db.get_user_by_firebase_uid(thread_owner_uid)
+                        client_name = client_user.get('display_name', 'Client') if client_user else 'Client'
+                        client_avatar = client_user.get('photo_url', '') if client_user else ''
+                        
+                        db.get_or_create_conversation(
+                            thread_id=thread_id,
+                            participant1_id=thread_owner_uid,
+                            participant2_id=firebase_uid,
+                            participant1_name=client_name,
+                            participant2_name=influencer_name,
+                            participant1_avatar=client_avatar,
+                            participant2_avatar=influencer_avatar,
+                            name=f"{campaign_name} - Chat"
+                        )
                 except Exception as e:
-                    # Thread might already exist (UNIQUE constraint on campaign_id + created_by)
+                    # Thread might already exist (UNIQUE constraint on campaign_id)
                     if 'UNIQUE constraint failed' not in str(e):
-                        logging.error(f"Failed to create thread for campaign {campaign_name}: {e}")
+                        logger.warning(f"Failed to create thread for campaign {campaign_name}: {e}")
     
     except HyptrbAPIError as e:
-        logging.warning(f"Failed to fetch campaigns for {email}: {e}")
+        logger.warning(f"Failed to fetch campaigns for {email}: {e}")
     except Exception as e:
-        logging.error(f"Error syncing threads for {email}: {e}")
+        logger.error(f"Error syncing threads for {email}: {e}")
     
     return threads_created
 
@@ -251,7 +343,7 @@ def ensure_user_exists(user_info: dict) -> dict:
     # Clean email - remove any .admin suffix that might be appended by Firebase
     if email and email.endswith('.admin'):
         email = email[:-6]  # Remove the last 6 characters (.admin)
-        logging.debug(f"Cleaned email from {user_info.get('email')} to {email}")
+        logger.info(f"Cleaned email from {user_info.get('email')} to {email}")
     
     # Check if user already exists in database
     existing_user = db.get_user_by_firebase_uid(firebase_uid)
@@ -275,7 +367,7 @@ def ensure_user_exists(user_info: dict) -> dict:
                     admin_emails = ['superadmin@hyptrb.africa', 'admin@hyptrb.africa']
                     if email in admin_emails:
                         role = 'main_admin'
-                        logging.debug(f"Assigned main_admin role to known admin email: {email}")
+                        logger.info(f"Assigned main_admin role to known admin email: {email}")
                 
                 # Step 2: Fetch profile based on role
                 if role:
@@ -299,10 +391,10 @@ def ensure_user_exists(user_info: dict) -> dict:
                                 photo_url = profile_data.get('photo_url') or photo_url
                                 phone_number = profile_data.get('phone_number') or phone_number
                     except HyptrbAPIError as e:
-                        logging.warning(f"Failed to fetch profile for {email}: {e}")
+                        logger.warning(f"Failed to fetch profile for {email}: {e}")
                         # Continue with basic info even if profile fetch fails
         except HyptrbAPIError as e:
-            logging.warning(f"Failed to fetch role for {email}: {e}")
+            logger.warning(f"Failed to fetch role for {email}: {e}")
             # Continue with basic info even if role fetch fails
     
         # Create/update user with fetched information
@@ -318,7 +410,7 @@ def ensure_user_exists(user_info: dict) -> dict:
         
         # Auto-create threads for campaigns (only for clients and influencers)
         if role in ['client', 'influencer'] and email:
-            logging.debug(f"Initial thread sync for new user {email}")
+            logger.info(f"Initial thread sync for new user {email}")
             sync_user_campaign_threads(firebase_uid, email, role)
     
     else:
@@ -492,16 +584,16 @@ def handle_threads():
         user_role = db_user.get('role')
         user_email = db_user.get('email')
         
-        logging.debug(f"GET /messages/threads - User: {user_email}, Role: {user_role}")
+        logger.debug(f"GET /messages/threads - User: {user_email}, Role: {user_role}")
         
         # If user doesn't have role, try to fetch it from Hyptrb
         if not user_role and user_email:
-            logging.warning(f"User {user_email} has no role, fetching from Hyptrb...")
+            logger.info(f"User {user_email} has no role, fetching from Hyptrb...")
             try:
                 role_data = fetch_user_role(user_email)
                 if role_data:
                     user_role = role_data.get('role')
-                    logging.debug(f"Fetched role: {user_role}")
+                    logger.info(f"Fetched role: {user_role}")
                     # Update user with role
                     db.create_or_update_user({
                         'firebase_uid': user_id,
@@ -513,16 +605,16 @@ def handle_threads():
                         'email_verified': db_user.get('email_verified', False)
                     })
             except HyptrbAPIError as e:
-                logging.error(f"Failed to fetch role: {e}")
+                logger.error(f"Failed to fetch role: {e}")
         
         if user_role and user_email:
             threads_synced = sync_user_campaign_threads(user_id, user_email, user_role)
             if threads_synced > 0:
-                logging.debug(f"Synced {threads_synced} new threads for {user_email}")
+                logger.debug(f"Synced {threads_synced} new threads for {user_email}")
             else:
-                logging.debug(f"No new threads to sync for {user_email}")
+                logger.debug(f"No new threads to sync for {user_email}")
         else:
-            logging.warning(f"Skipping thread sync - Role: {user_role}, Email: {user_email}")
+            logger.debug(f"Skipping thread sync - Role: {user_role}, Email: {user_email}")
         
         # Get threads based on user role (admins see all threads with messages)
         user_threads = db.get_threads_for_user(user_id, user_role)
@@ -575,7 +667,7 @@ def handle_threads():
             
             thread['conversations'] = enriched_conversations
         
-        logging.debug(f"Returning {len(user_threads)} threads for {user_email}")
+        logger.debug(f"Returning {len(user_threads)} threads for {user_email}")
         
         return jsonify({
             'threads': user_threads,
@@ -588,8 +680,9 @@ def handle_threads():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
-        # Add user_id to thread data
-        data['created_by'] = user_id
+        # Determine thread owner (always the campaign owner if campaign_id is present)
+        campaign_id = data.get('campaign_id')
+        data['created_by'] = get_campaign_owner_uid(campaign_id, default_uid=user_id)
         
         thread_id = db.create_thread(data)
         thread = db.get_thread_by_id(thread_id)
@@ -712,10 +805,16 @@ def handle_thread_conversations(thread_id):
         db_user = ensure_user_exists(user)
         user_role = db_user.get('role')
         
-        # For POST, verify user is the thread owner OR an admin
-        # Admins can create conversations in any thread to facilitate support
-        if thread.get('created_by') != user_id and not is_admin_role(user_role):
-            return jsonify({'error': 'Access denied. Only the thread owner or admins can create conversations'}), 403
+        # For POST, verify user is the thread owner, an admin, or an influencer in a campaign thread
+        # This ensures that even if the campaign owner is the thread owner, 
+        # influencers can still initiate conversations with the client.
+        is_owner = (thread.get('created_by') == user_id)
+        is_admin = is_admin_role(user_role)
+        is_campaign_thread = (thread.get('campaign_id') is not None)
+        is_influencer = (user_role == 'influencer')
+        
+        if not (is_owner or is_admin or (is_campaign_thread and is_influencer)):
+            return jsonify({'error': 'Access denied. Only the thread owner, admins, or participating influencers can create conversations'}), 403
         
         data = request.get_json()
         if not data:
@@ -727,13 +826,14 @@ def handle_thread_conversations(thread_id):
         
         # Determine participants based on who is creating the conversation
         # If admin is creating in someone else's thread, thread owner is participant1
+        # If influencer is creating in a campaign thread, thread owner is participant1
         # Otherwise, the authenticated user is participant1
         thread_owner_id = thread.get('created_by')
         
-        if is_admin_role(user_role) and thread_owner_id != user_id:
-            # Admin creating conversation in someone else's thread
-            # participant1 = thread owner (client/influencer)
-            # participant2 = other_participant_id OR admin (if no other participant specified)
+        if (is_admin_role(user_role) or (is_influencer and is_campaign_thread)) and thread_owner_id != user_id:
+            # Admin or influencer creating conversation in a thread owned by someone else
+            # participant1 = thread owner (client)
+            # participant2 = other_participant_id OR the creator (if no other participant specified)
             participant1_id = thread_owner_id
             participant2_id = other_participant_id if other_participant_id else user_id
         else:
@@ -991,11 +1091,14 @@ def admin_start_chat(user_firebase_uid):
     # Use a special campaign_id format for admin chats: "admin_support_{user_uid}"
     admin_thread_campaign_id = f"admin_support_{user_firebase_uid}"
     
+    # Determine thread owner (always the user being supported)
+    thread_owner_uid = get_campaign_owner_uid(admin_thread_campaign_id, default_uid=user_firebase_uid)
+    
     thread_data = {
         'title': f"Admin Support - {target_name}",
         'description': f"Direct admin support chat with {target_name}",
         'campaign_id': admin_thread_campaign_id,
-        'created_by': admin_id,
+        'created_by': thread_owner_uid,
         'status': 'active'
     }
     
