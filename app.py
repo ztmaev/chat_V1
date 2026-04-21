@@ -616,7 +616,7 @@ def handle_threads():
         else:
             logger.debug(f"Skipping thread sync - Role: {user_role}, Email: {user_email}")
         
-        # Get threads based on user role (admins see all threads with messages)
+        # Get threads based on user role (admins see all threads with conversations)
         user_threads = db.get_threads_for_user(user_id, user_role)
         
         # Enrich each thread with conversation data

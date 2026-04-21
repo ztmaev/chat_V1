@@ -415,7 +415,7 @@ class MessagingDatabase:
     def get_threads_for_user(self, user_id: str, user_role: str = None) -> List[Dict]:
         """
         Get threads for user based on their role:
-        - Admins (main_admin, billing_admin, campaign_admin): See all threads with at least one message
+        - Admins (main_admin, billing_admin, campaign_admin): See all threads with at least one conversation
         - Others: See threads where they are creator OR participant in any conversation
         """
         conn = self.get_connection()
@@ -424,17 +424,16 @@ class MessagingDatabase:
             is_admin = user_role in ['main_admin', 'billing_admin', 'campaign_admin']
             
             if is_admin:
-                # Admins see all threads that have at least one message
+                # Admins see all threads that have at least one conversation
                 cursor = conn.execute('''
                     SELECT DISTINCT t.*,
                            COUNT(DISTINCT c.id) as conversation_count,
                            SUM(c.unread_count) as total_unread
                     FROM threads t
                     LEFT JOIN conversations c ON t.id = c.thread_id
-                    LEFT JOIN messages m ON t.id = m.thread_id AND m.deleted = FALSE
                     WHERE t.status = 'active'
                     GROUP BY t.id
-                    HAVING COUNT(m.id) > 0
+                    HAVING COUNT(DISTINCT c.id) > 0
                     ORDER BY t.updated_at DESC
                 ''')
             else:
